@@ -3,9 +3,6 @@ name: Pack and Deploy
 on:
   workflow_call:
     inputs:
-      environment_url:
-        required: true
-        type: string
       charm_name:
         required: true
         type: string
@@ -147,7 +144,6 @@ jobs:
       channel: ${{ inputs.channel }}
       juju_controller_name: ${{ inputs.juju_controller_name }}
       juju_model_name: ${{ inputs.juju_model_name }}
-      environment_url: ${{ inputs.environment_url }}
     secrets:
       VAULT_APPROLE_ROLE_ID: ${{ secrets.VAULT_APPROLE_ROLE_ID }}
       VAULT_APPROLE_SECRET_ID: ${{ secrets.VAULT_APPROLE_SECRET_ID }}
