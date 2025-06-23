@@ -3,7 +3,19 @@ name: Deploy with Juju
 on:
   workflow_call:
     inputs:
-      environment:
+      environment_url:
+        required: true
+        type: string
+      charm_name:
+        required: true
+        type: string
+      channel:
+        required: true
+        type: string
+      juju_controller_name:
+        required: true
+        type: string
+      juju_model_name:
         required: true
         type: string
     secrets:
@@ -16,8 +28,7 @@ jobs:
   deploy:
     runs-on: [self-hosted, self-hosted-linux-amd64-jammy-private-endpoint-medium]
     environment:
-      name: ${{ inputs.environment }}
-      url: ${{ vars.ENVIRONMENT_URL }}
+      url: ${{ inputs.environment_url }}
     steps:
       - name: Install Dependencies
         run: |
@@ -31,8 +42,8 @@ jobs:
           VAULT_SECRET_ID: ${{ secrets.VAULT_APPROLE_SECRET_ID }}
         run: |
           set -e
-          export CONTROLLER_NAME=${{ vars.JUJU_CONTROLLER_NAME }}
-          export MODEL_NAME=${{ vars.JUJU_MODEL_NAME }}
+          export CONTROLLER_NAME=${{ inputs.juju_controller_name }}
+          export MODEL_NAME=${{ inputs.juju_model_name }}
           export VAULT_SECRET_PATH_ROLE=secret/prodstack6/roles/${MODEL_NAME}
           export VAULT_SECRET_PATH_COMMON=secret/prodstack6/juju/common
           export VAULT_TOKEN=$(vault write -f -field=token auth/approle/login role_id="$VAULT_ROLE_ID" secret_id="$VAULT_SECRET_ID") 
@@ -44,9 +55,9 @@ jobs:
 
       - name: Deploy Application
         run: |
-          export JUJU_MODEL=admin/${{ vars.JUJU_MODEL_NAME }}
-          export CHARM_NAME=${{ vars.CHARM_NAME }}
-          export CHANNEL=${{ vars.CHANNEL || 'latest/stable' }}
+          export JUJU_MODEL=admin/${{ inputs.juju_model_name }}
+          export CHARM_NAME=${{ inputs.charm_name }}
+          export CHANNEL=${{ inputs.channel }}
           export resource_revision=$(juju charm-resources $CHARM_NAME --channel=$CHANNEL | awk 'NR==2 {print $2}')
           juju refresh $CHARM_NAME --channel=$CHANNEL
           juju refresh $CHARM_NAME --channel=$CHANNEL --resource flask-app-image=$resource_revision

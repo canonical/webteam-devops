@@ -3,11 +3,21 @@ name: Pack and Deploy
 on:
   workflow_call:
     inputs:
-      environment:
-        description: 'Environment (Production or Staging)'
+      environment_url:
         required: true
         type: string
-
+      charm_name:
+        required: true
+        type: string
+      channel:
+        required: true
+        type: string
+      juju_controller_name:
+        required: true
+        type: string
+      juju_model_name:
+        required: true
+        type: string
     secrets:
       VAULT_APPROLE_ROLE_ID:
         required: true
@@ -35,7 +45,6 @@ jobs:
   pack-rock:
     name: Pack Rock
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -53,21 +62,20 @@ jobs:
         id: upload
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ vars.CHARM_NAME }}-rock
+          name: ${{ inputs.charm_name }}-rock
           path: ./*.rock
 
   publish-image:
     name: Publish OCI Image
     runs-on: ubuntu-latest
     needs: [pack-rock]
-    environment: ${{ inputs.environment }}
     outputs:
       image_url: ${{ steps.set_image_url.outputs.image_url }}
     steps:
       - name: Get Rock
         uses: actions/download-artifact@v4
         with:
-          name: ${{ vars.CHARM_NAME }}-rock
+          name: ${{ inputs.charm_name }}-rock
 
       - name: Set image URL
         id: set_image_url
@@ -84,22 +92,21 @@ jobs:
           CHARMCRAFT_AUTH: ${{ secrets.CHARMHUB_TOKEN }}
         run: |
           sudo snap install charmcraft --classic
-          charmcraft upload-resource ${{ vars.CHARM_NAME }} flask-app-image --image=$(docker images --format "{{.ID}}" | head -n 1) --verbosity=trace
+          charmcraft upload-resource ${{ inputs.charm_name }} flask-app-image --image=$(docker images --format "{{.ID}}" | head -n 1) --verbosity=trace
 
       - name: Attach resource to charm
         env:
           CHARMCRAFT_AUTH: ${{ secrets.CHARMHUB_TOKEN }}
         run: |
-          revision_number=$(charmcraft revisions "${{ vars.CHARM_NAME }}" | awk 'NR==2 {print $1}')
-          resource_revision_number=$(charmcraft resource-revisions "${{ vars.CHARM_NAME }}" flask-app-image | awk 'NR==2 {print $1}')
-          charmcraft release "${{ vars.CHARM_NAME }}" --channel=${{ vars.CHANNEL }} --revision $revision_number --resource flask-app-image:$resource_revision_number
+          revision_number=$(charmcraft revisions "${{ inputs.charm_name }}" | awk 'NR==2 {print $1}')
+          resource_revision_number=$(charmcraft resource-revisions "${{ inputs.charm_name }}" flask-app-image | awk 'NR==2 {print $1}')
+          charmcraft release "${{ inputs.charm_name }}" --channel=${{ inputs.channel }} --revision $revision_number --resource flask-app-image:$resource_revision_number
 
   pack-charm:
     name: Pack Charm
     runs-on: ubuntu-latest
     needs: setup
     if: needs.setup.outputs.charm_changed == 'true'
-    environment: ${{ inputs.environment }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -127,8 +134,8 @@ jobs:
         env:
           CHARMCRAFT_AUTH: ${{ secrets.CHARMHUB_TOKEN }}
         run: |
-          revision_number=$(charmcraft revisions ${{ vars.CHARM_NAME }} | awk 'NR==2 {print $1}')
-          charmcraft release ${{ vars.CHARM_NAME }} --channel=${{ vars.CHANNEL }} --revision $revision_number
+          revision_number=$(charmcraft revisions ${{ inputs.charm_name }} | awk 'NR==2 {print $1}')
+          charmcraft release ${{ inputs.charm_name }} --channel=${{ inputs.channel }} --revision $revision_number
 
   deploy:
     name: Deploy to Environment
@@ -136,7 +143,11 @@ jobs:
     needs: [setup, pack-rock, pack-charm, publish-image]
     uses: ./.github/workflows/juju_deploy.yaml
     with:
-      environment: ${{ inputs.environment }}
+      charm_name: ${{ inputs.charm_name }}
+      channel: ${{ inputs.channel }}
+      juju_controller_name: ${{ inputs.juju_controller_name }}
+      juju_model_name: ${{ inputs.juju_model_name }}
+      environment_url: ${{ inputs.environment_url }}
     secrets:
       VAULT_APPROLE_ROLE_ID: ${{ secrets.VAULT_APPROLE_ROLE_ID }}
       VAULT_APPROLE_SECRET_ID: ${{ secrets.VAULT_APPROLE_SECRET_ID }}
