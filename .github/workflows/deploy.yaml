@@ -18,6 +18,10 @@ on:
       environment:
         required: false
         type: string
+      environmentUrl:
+        required: false
+        type: string
+
     secrets:
       VAULT_APPROLE_ROLE_ID:
         required: true
@@ -32,11 +36,30 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       charm_changed: ${{ steps.check.outputs.charm_changed }}
+      environment: ${{ steps.set_env.outputs.environment }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine environment
+        id: set_env
+        run: |
+          if [[ -n "${{ github.event.inputs.environment }}" ]]; then
+            echo "environment=${{ github.event.inputs.environment }}" >> "$GITHUB_OUTPUT"
+          elif [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            echo "environment=Production" >> "$GITHUB_OUTPUT"
+            echo "target_ref=refs/heads/main" >> "$GITHUB_OUTPUT"
+          else
+            echo "environment=Staging" >> "$GITHUB_OUTPUT"
+            echo "target_ref=refs/heads/staging" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Check for charm/ changes
         id: check
         run: |
-          if git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '^charm/'; then
+          if git diff --name-only ${{ steps.set_env.outputs.target_ref }} ${{ github.sha }} | grep '^charm/'; then
             echo "charm_changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "charm_changed=false" >> "$GITHUB_OUTPUT"
@@ -45,9 +68,19 @@ jobs:
   pack-rock:
     name: Pack Rock
     runs-on: ubuntu-latest
+    needs: [setup]
+    environment: ${{ needs.setup.outputs.environment }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+
+      - name: Build assets
+        run: |
+          yarn install
+          yarn run build
 
       - name: Setup LXD
         uses: canonical/setup-lxd@main
@@ -65,48 +98,12 @@ jobs:
           name: ${{ inputs.charm_name }}-rock
           path: ./*.rock
 
-  publish-image:
-    name: Publish OCI Image
-    runs-on: ubuntu-latest
-    needs: [pack-rock]
-    outputs:
-      image_url: ${{ steps.set_image_url.outputs.image_url }}
-    steps:
-      - name: Get Rock
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ inputs.charm_name }}-rock
-
-      - name: Set image URL
-        id: set_image_url
-        run: echo "image_url=ghcr.io/${GITHUB_REPOSITORY}:$(date +%s)-${GITHUB_SHA:0:7}" >> $GITHUB_OUTPUT
-
-      - name: Push to GHCR
-        run: skopeo --insecure-policy copy oci-archive:$(ls *.rock) docker://${{ steps.set_image_url.outputs.image_url }} --dest-creds "canonical:${{ secrets.GITHUB_TOKEN }}"
-
-      - name: Pull image into registry
-        run: docker pull ${{ steps.set_image_url.outputs.image_url }}
-
-      - name: Upload flask app OCI image
-        env:
-          CHARMCRAFT_AUTH: ${{ secrets.CHARMHUB_TOKEN }}
-        run: |
-          sudo snap install charmcraft --classic
-          charmcraft upload-resource ${{ inputs.charm_name }} flask-app-image --image=$(docker images --format "{{.ID}}" | head -n 1) --verbosity=trace
-
-      - name: Attach resource to charm
-        env:
-          CHARMCRAFT_AUTH: ${{ secrets.CHARMHUB_TOKEN }}
-        run: |
-          revision_number=$(charmcraft revisions "${{ inputs.charm_name }}" | awk 'NR==2 {print $1}')
-          resource_revision_number=$(charmcraft resource-revisions "${{ inputs.charm_name }}" flask-app-image | awk 'NR==2 {print $1}')
-          charmcraft release "${{ inputs.charm_name }}" --channel=${{ inputs.channel }} --revision $revision_number --resource flask-app-image:$resource_revision_number
-
-  pack-charm:
-    name: Pack Charm
+  pack-and-upload-charm:
+    name: Pack and Upload Charm
     runs-on: ubuntu-latest
     needs: setup
     if: needs.setup.outputs.charm_changed == 'true'
+    environment: ${{ needs.setup.outputs.environment }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -130,24 +127,57 @@ jobs:
           CHARMCRAFT_AUTH: ${{ secrets.CHARMHUB_TOKEN }}
         run: charmcraft upload ./*.charm
 
-      - name: Release charm
+  publish-image-and-release-charm:
+    name: Publish OCI Image and Release Charm
+    runs-on: ubuntu-latest
+    needs: [pack-rock, pack-and-upload-charm]
+    environment: ${{ needs.setup.outputs.environment }}
+    outputs:
+      image_url: ${{ steps.set_image_url.outputs.image_url }}
+    steps:
+      - name: Get Rock
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.charm_name }}-rock
+
+      - name: Set image URL
+        id: set_image_url
+        run: echo "image_url=ghcr.io/${GITHUB_REPOSITORY}:$(date +%s)-${GITHUB_SHA:0:7}" >> $GITHUB_OUTPUT
+
+      - name: Push to GHCR
+        run: skopeo --insecure-policy copy oci-archive:$(ls *.rock) docker://${{ steps.set_image_url.outputs.image_url }} --dest-creds "canonical:${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Pull image into registry
+        run: docker pull ${{ steps.set_image_url.outputs.image_url }}
+
+      - name: Setup charmcraft
+        run: sudo snap install charmcraft --classic --channel=latest/stable
+
+      - name: Upload flask app OCI image
+        env:
+          CHARMCRAFT_AUTH: ${{ secrets.CHARMHUB_TOKEN }}
+        run: charmcraft upload-resource ${{ inputs.charm_name }} flask-app-image --image=$(docker images --format "{{.ID}}" | head -n 1) --verbosity=trace
+
+      - name: Attach resource to charm and release
         env:
           CHARMCRAFT_AUTH: ${{ secrets.CHARMHUB_TOKEN }}
         run: |
-          revision_number=$(charmcraft revisions ${{ inputs.charm_name }} | awk 'NR==2 {print $1}')
-          charmcraft release ${{ inputs.charm_name }} --channel=${{ inputs.channel }} --revision $revision_number
+          revision_number=$(charmcraft revisions "${{ inputs.charm_name }}" | awk 'NR==2 {print $1}')
+          resource_revision_number=$(charmcraft resource-revisions "${{ inputs.charm_name }}" flask-app-image | awk 'NR==2 {print $1}')
+          charmcraft release "${{ inputs.charm_name }}" --channel=${{ inputs.channel }} --revision $revision_number --resource flask-app-image:$resource_revision_number
 
   deploy:
     name: Deploy to Environment
     if: always()
-    needs: [setup, pack-rock, pack-charm, publish-image]
+    needs: [setup, pack-rock, pack-and-upload-charm, publish-image-and-release-charm]
     uses: ./.github/workflows/juju_deploy.yaml
     with:
       charm_name: ${{ inputs.charm_name }}
       channel: ${{ inputs.channel }}
       juju_controller_name: ${{ inputs.juju_controller_name }}
       juju_model_name: ${{ inputs.juju_model_name }}
-      environment: ${{ inputs.environment || '' }}
+      environment: ${{ inputs.environment || needs.setup.outputs.environment }}
+      environmentUrl: ${{ inputs.environmentUrl || '' }}
     secrets:
       VAULT_APPROLE_ROLE_ID: ${{ secrets.VAULT_APPROLE_ROLE_ID }}
       VAULT_APPROLE_SECRET_ID: ${{ secrets.VAULT_APPROLE_SECRET_ID }}
