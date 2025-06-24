@@ -17,9 +17,11 @@ on:
         type: string
       environment:
         required: false
+        default: ''
         type: string
       environmentUrl:
         required: false
+        default: ''
         type: string
 
     secrets:
@@ -36,30 +38,11 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       charm_changed: ${{ steps.check.outputs.charm_changed }}
-      environment: ${{ steps.set_env.outputs.environment }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Determine environment
-        id: set_env
-        run: |
-          if [[ -n "${{ github.event.inputs.environment }}" ]]; then
-            echo "environment=${{ github.event.inputs.environment }}" >> "$GITHUB_OUTPUT"
-          elif [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
-            echo "environment=Production" >> "$GITHUB_OUTPUT"
-            echo "target_ref=refs/heads/main" >> "$GITHUB_OUTPUT"
-          else
-            echo "environment=Staging" >> "$GITHUB_OUTPUT"
-            echo "target_ref=refs/heads/staging" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Check for charm/ changes
         id: check
         run: |
-          if git diff --name-only ${{ steps.set_env.outputs.target_ref }} ${{ github.sha }} | grep '^charm/'; then
+          if git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '^charm/'; then
             echo "charm_changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "charm_changed=false" >> "$GITHUB_OUTPUT"
@@ -68,19 +51,10 @@ jobs:
   pack-rock:
     name: Pack Rock
     runs-on: ubuntu-latest
-    needs: [setup]
-    environment: ${{ needs.setup.outputs.environment }}
+    environment: ${{ inputs.environment }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Use Node.js
-        uses: actions/setup-node@v4
-
-      - name: Build assets
-        run: |
-          yarn install
-          yarn run build
 
       - name: Setup LXD
         uses: canonical/setup-lxd@main
@@ -103,7 +77,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: setup
     if: needs.setup.outputs.charm_changed == 'true'
-    environment: ${{ needs.setup.outputs.environment }}
+    environment: ${{ inputs.environment }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -131,7 +105,7 @@ jobs:
     name: Publish OCI Image and Release Charm
     runs-on: ubuntu-latest
     needs: [pack-rock, pack-and-upload-charm]
-    environment: ${{ needs.setup.outputs.environment }}
+    environment: ${{ inputs.environment }}
     outputs:
       image_url: ${{ steps.set_image_url.outputs.image_url }}
     steps:
@@ -169,14 +143,14 @@ jobs:
   deploy:
     name: Deploy to Environment
     if: always()
-    needs: [setup, pack-rock, pack-and-upload-charm, publish-image-and-release-charm]
+    needs: [pack-rock, pack-and-upload-charm, publish-image-and-release-charm]
     uses: ./.github/workflows/juju_deploy.yaml
     with:
       charm_name: ${{ inputs.charm_name }}
       channel: ${{ inputs.channel }}
       juju_controller_name: ${{ inputs.juju_controller_name }}
       juju_model_name: ${{ inputs.juju_model_name }}
-      environment: ${{ inputs.environment || needs.setup.outputs.environment }}
+      environment: ${{ inputs.environment || '' }}
       environmentUrl: ${{ inputs.environmentUrl || '' }}
     secrets:
       VAULT_APPROLE_ROLE_ID: ${{ secrets.VAULT_APPROLE_ROLE_ID }}
