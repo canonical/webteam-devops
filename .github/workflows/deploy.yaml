@@ -39,6 +39,11 @@ jobs:
     outputs:
       charm_changed: ${{ steps.check.outputs.charm_changed }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
       - name: Check for charm/ changes
         id: check
         run: |
