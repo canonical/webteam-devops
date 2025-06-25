@@ -149,7 +149,7 @@ jobs:
 
   deploy:
     name: Deploy to Environment
-    if: false
+    if: always() && !failure()
     needs: [publish-image-and-release-charm]
     uses: ./.github/workflows/juju_deploy.yaml
     with:
