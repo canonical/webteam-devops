@@ -47,8 +47,6 @@ jobs:
       - name: Check for charm/ changes
         id: check
         run: |
-          echo "event.before: " && echo ${{ github.event.before }}
-          echo "sha: " && echo ${{ github.sha }}
           if git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '^charm/'; then
             echo "charm_changed=true" >> "$GITHUB_OUTPUT"
           else
@@ -58,6 +56,7 @@ jobs:
   pack-rock:
     name: Pack Rock
     runs-on: ubuntu-latest
+    needs: setup
     environment: ${{ inputs.environment }}
     steps:
       - name: Checkout code
@@ -151,7 +150,7 @@ jobs:
   deploy:
     name: Deploy to Environment
     if: false
-    needs: [pack-rock, pack-and-upload-charm, publish-image-and-release-charm]
+    needs: [publish-image-and-release-charm]
     uses: ./.github/workflows/juju_deploy.yaml
     with:
       charm_name: ${{ inputs.charm_name }}
