@@ -142,7 +142,7 @@ jobs:
 
   deploy:
     name: Deploy to Environment
-    if: always()
+    if: false
     needs: [pack-rock, pack-and-upload-charm, publish-image-and-release-charm]
     uses: ./.github/workflows/juju_deploy.yaml
     with:
