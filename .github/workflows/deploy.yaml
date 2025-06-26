@@ -17,7 +17,13 @@ on:
         type: string
       environment:
         required: false
+        default: ''
         type: string
+      environment_url:
+        required: false
+        default: ''
+        type: string
+
     secrets:
       VAULT_APPROLE_ROLE_ID:
         required: true
@@ -33,6 +39,11 @@ jobs:
     outputs:
       charm_changed: ${{ steps.check.outputs.charm_changed }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
       - name: Check for charm/ changes
         id: check
         run: |
@@ -45,6 +56,8 @@ jobs:
   pack-rock:
     name: Pack Rock
     runs-on: ubuntu-latest
+    needs: setup
+    environment: ${{ inputs.environment }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -65,48 +78,12 @@ jobs:
           name: ${{ inputs.charm_name }}-rock
           path: ./*.rock
 
-  publish-image:
-    name: Publish OCI Image
-    runs-on: ubuntu-latest
-    needs: [pack-rock]
-    outputs:
-      image_url: ${{ steps.set_image_url.outputs.image_url }}
-    steps:
-      - name: Get Rock
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ inputs.charm_name }}-rock
-
-      - name: Set image URL
-        id: set_image_url
-        run: echo "image_url=ghcr.io/${GITHUB_REPOSITORY}:$(date +%s)-${GITHUB_SHA:0:7}" >> $GITHUB_OUTPUT
-
-      - name: Push to GHCR
-        run: skopeo --insecure-policy copy oci-archive:$(ls *.rock) docker://${{ steps.set_image_url.outputs.image_url }} --dest-creds "canonical:${{ secrets.GITHUB_TOKEN }}"
-
-      - name: Pull image into registry
-        run: docker pull ${{ steps.set_image_url.outputs.image_url }}
-
-      - name: Upload flask app OCI image
-        env:
-          CHARMCRAFT_AUTH: ${{ secrets.CHARMHUB_TOKEN }}
-        run: |
-          sudo snap install charmcraft --classic
-          charmcraft upload-resource ${{ inputs.charm_name }} flask-app-image --image=$(docker images --format "{{.ID}}" | head -n 1) --verbosity=trace
-
-      - name: Attach resource to charm
-        env:
-          CHARMCRAFT_AUTH: ${{ secrets.CHARMHUB_TOKEN }}
-        run: |
-          revision_number=$(charmcraft revisions "${{ inputs.charm_name }}" | awk 'NR==2 {print $1}')
-          resource_revision_number=$(charmcraft resource-revisions "${{ inputs.charm_name }}" flask-app-image | awk 'NR==2 {print $1}')
-          charmcraft release "${{ inputs.charm_name }}" --channel=${{ inputs.channel }} --revision $revision_number --resource flask-app-image:$resource_revision_number
-
-  pack-charm:
-    name: Pack Charm
+  pack-and-upload-charm:
+    name: Pack and Upload Charm
     runs-on: ubuntu-latest
     needs: setup
     if: needs.setup.outputs.charm_changed == 'true'
+    environment: ${{ inputs.environment }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -130,24 +107,58 @@ jobs:
           CHARMCRAFT_AUTH: ${{ secrets.CHARMHUB_TOKEN }}
         run: charmcraft upload ./*.charm
 
-      - name: Release charm
+  publish-image-and-release-charm:
+    name: Publish OCI Image and Release Charm
+    runs-on: ubuntu-latest
+    needs: [pack-rock, pack-and-upload-charm]
+    if: always() && !failure()
+    environment: ${{ inputs.environment }}
+    outputs:
+      image_url: ${{ steps.set_image_url.outputs.image_url }}
+    steps:
+      - name: Get Rock
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.charm_name }}-rock
+
+      - name: Set image URL
+        id: set_image_url
+        run: echo "image_url=ghcr.io/${GITHUB_REPOSITORY}:$(date +%s)-${GITHUB_SHA:0:7}" >> $GITHUB_OUTPUT
+
+      - name: Push to GHCR
+        run: skopeo --insecure-policy copy oci-archive:$(ls *.rock) docker://${{ steps.set_image_url.outputs.image_url }} --dest-creds "canonical:${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Pull image into registry
+        run: docker pull ${{ steps.set_image_url.outputs.image_url }}
+
+      - name: Setup charmcraft
+        run: sudo snap install charmcraft --classic --channel=latest/stable
+
+      - name: Upload flask app OCI image
+        env:
+          CHARMCRAFT_AUTH: ${{ secrets.CHARMHUB_TOKEN }}
+        run: charmcraft upload-resource ${{ inputs.charm_name }} flask-app-image --image=$(docker images --format "{{.ID}}" | head -n 1) --verbosity=trace
+
+      - name: Attach resource to charm and release
         env:
           CHARMCRAFT_AUTH: ${{ secrets.CHARMHUB_TOKEN }}
         run: |
-          revision_number=$(charmcraft revisions ${{ inputs.charm_name }} | awk 'NR==2 {print $1}')
-          charmcraft release ${{ inputs.charm_name }} --channel=${{ inputs.channel }} --revision $revision_number
+          revision_number=$(charmcraft revisions "${{ inputs.charm_name }}" | awk 'NR==2 {print $1}')
+          resource_revision_number=$(charmcraft resource-revisions "${{ inputs.charm_name }}" flask-app-image | awk 'NR==2 {print $1}')
+          charmcraft release "${{ inputs.charm_name }}" --channel=${{ inputs.channel }} --revision $revision_number --resource flask-app-image:$resource_revision_number
 
   deploy:
     name: Deploy to Environment
-    if: always()
-    needs: [setup, pack-rock, pack-charm, publish-image]
+    if: always() && !failure()
+    needs: [publish-image-and-release-charm]
     uses: ./.github/workflows/juju_deploy.yaml
     with:
       charm_name: ${{ inputs.charm_name }}
       channel: ${{ inputs.channel }}
       juju_controller_name: ${{ inputs.juju_controller_name }}
       juju_model_name: ${{ inputs.juju_model_name }}
-      environment: ${{ inputs.environment || '' }}
+      environment: ${{ inputs.environment  }}
+      environment_url: ${{ inputs.environment_url  }}
     secrets:
       VAULT_APPROLE_ROLE_ID: ${{ secrets.VAULT_APPROLE_ROLE_ID }}
       VAULT_APPROLE_SECRET_ID: ${{ secrets.VAULT_APPROLE_SECRET_ID }}

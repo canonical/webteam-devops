@@ -5,6 +5,11 @@ on:
     inputs:
       environment:
         required: false
+        default: ''
+        type: string
+      environment_url:
+        required: false
+        default: ''
         type: string
       charm_name:
         required: true
@@ -27,7 +32,9 @@ on:
 jobs:
   deploy:
     runs-on: [self-hosted, self-hosted-linux-amd64-jammy-private-endpoint-medium]
-    environment: ${{ inputs.environment || '' }}
+    environment:
+      name: ${{ inputs.environment  }}
+      url: ${{ inputs.environment_url  }}
     steps:
       - name: Install Dependencies
         run: |
