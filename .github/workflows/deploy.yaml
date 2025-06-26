@@ -52,9 +52,6 @@ jobs:
           else
             echo "charm_changed=false" >> "$GITHUB_OUTPUT"
           fi
-      
-      - name: Test
-        run: echo "CHARMHUB_TOKEN " && echo ${{ secrets.CHARMHUB_TOKEN }}
 
   pack-rock:
     name: Pack Rock
