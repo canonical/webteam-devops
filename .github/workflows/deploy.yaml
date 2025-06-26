@@ -19,7 +19,7 @@ on:
         required: false
         default: ''
         type: string
-      environmentUrl:
+      environment_url:
         required: false
         default: ''
         type: string
@@ -157,8 +157,8 @@ jobs:
       channel: ${{ inputs.channel }}
       juju_controller_name: ${{ inputs.juju_controller_name }}
       juju_model_name: ${{ inputs.juju_model_name }}
-      environment: ${{ inputs.environment || '' }}
-      environmentUrl: ${{ inputs.environmentUrl || '' }}
+      environment: ${{ inputs.environment  }}
+      environmentUrl: ${{ inputs.environment_url  }}
     secrets:
       VAULT_APPROLE_ROLE_ID: ${{ secrets.VAULT_APPROLE_ROLE_ID }}
       VAULT_APPROLE_SECRET_ID: ${{ secrets.VAULT_APPROLE_SECRET_ID }}
