@@ -47,7 +47,7 @@ jobs:
       - name: Check for charm/ changes
         id: check
         run: |
-          if git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '^charm/'; then
+          if git diff --name-only HEAD~ ${{ github.sha }} | grep '^charm/'; then
             echo "charm_changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "charm_changed=false" >> "$GITHUB_OUTPUT"
