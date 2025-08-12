@@ -23,6 +23,9 @@ on:
         required: false
         default: ''
         type: string
+      enable_experimental_extensions:
+        required: false
+        type: boolean
 
     secrets:
       VAULT_APPROLE_ROLE_ID:
@@ -69,6 +72,8 @@ jobs:
         run: sudo snap install rockcraft --classic
 
       - name: Pack rock
+        env:
+          ROCKCRAFT_ENABLE_EXPERIMENTAL_EXTENSIONS: ${{ inputs.enable_experimental_extensions }}
         run: rockcraft pack
 
       - name: Upload rock
