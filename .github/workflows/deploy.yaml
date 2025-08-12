@@ -131,25 +131,39 @@ jobs:
       - name: Pull image into registry
         run: docker pull ${{ steps.set_image_url.outputs.image_url }}
 
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Determine resource name
+        id: resource_name
+        run: |
+          if grep -q 'flask-framework' charm/charmcraft.yaml; then
+            echo "resource_name=flask-app-image" >> "$GITHUB_OUTPUT"
+          elif grep -q 'django-framework' charm/charmcraft.yaml; then
+            echo "resource_name=django-app-image" >> "$GITHUB_OUTPUT"
+          else
+            echo "resource_name=app-image" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Setup charmcraft
         run: sudo snap install charmcraft --classic --channel=latest/stable
 
-      - name: Upload flask app OCI image
+      - name: Upload OCI image resource
         env:
           CHARMCRAFT_AUTH: ${{ secrets.CHARMHUB_TOKEN }}
-        run: charmcraft upload-resource ${{ inputs.charm_name }} flask-app-image --image=$(docker images --format "{{.ID}}" | head -n 1) --verbosity=trace
+        run: charmcraft upload-resource ${{ inputs.charm_name }} ${{ steps.resource_name.outputs.resource_name }} --image=$(docker images --format "{{.ID}}" | head -n 1) --verbosity=trace
 
       - name: Attach resource to charm and release
         env:
           CHARMCRAFT_AUTH: ${{ secrets.CHARMHUB_TOKEN }}
         run: |
           revision_number=$(charmcraft revisions "${{ inputs.charm_name }}" | awk 'NR==2 {print $1}')
-          resource_revision_number=$(charmcraft resource-revisions "${{ inputs.charm_name }}" flask-app-image | awk 'NR==2 {print $1}')
-          charmcraft release "${{ inputs.charm_name }}" --channel=${{ inputs.channel }} --revision $revision_number --resource flask-app-image:$resource_revision_number
+          resource_revision_number=$(charmcraft resource-revisions "${{ inputs.charm_name }}" ${{ steps.resource_name.outputs.resource_name }} | awk 'NR==2 {print $1}')
+          charmcraft release "${{ inputs.charm_name }}" --channel=${{ inputs.channel }} --revision $revision_number --resource ${{ steps.resource_name.outputs.resource_name }}:$resource_revision_number
 
   deploy:
     name: Deploy to Environment
-    if: always() && !failure()
+    if: always() && !failure() && !cancelled()
     needs: [publish-image-and-release-charm]
     uses: ./.github/workflows/juju_deploy.yaml
     with:
