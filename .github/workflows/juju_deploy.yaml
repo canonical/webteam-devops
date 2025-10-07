@@ -14,6 +14,10 @@ on:
       charm_name:
         required: true
         type: string
+      app_name:
+        required: false
+        default: ''
+        type: string
       channel:
         required: true
         type: string
@@ -62,9 +66,9 @@ jobs:
       - name: Deploy Application
         run: |
           export JUJU_MODEL=admin/${{ inputs.juju_model_name }}
-          export CHARM_NAME=${{ inputs.charm_name }}
+          export CHARM_NAME=${{ inputs.app_name }}
+          export APP_NAME=${{ inputs.app_name || inputs.charm_name }}
           export CHANNEL=${{ inputs.channel }}
           export resource_revision=$(juju charm-resources $CHARM_NAME --channel=$CHANNEL | awk 'NR==2 {print $2}')
-          juju refresh $CHARM_NAME --channel=$CHANNEL
-          juju refresh $CHARM_NAME --channel=$CHANNEL --resource flask-app-image=$resource_revision
-          juju wait-for application $CHARM_NAME --query="name=='$CHARM_NAME' && (status=='active' || status=='idle')"
+          juju refresh $APP_NAME --channel=$CHANNEL
+          juju wait-for application $APP_NAME --query="name=='$APP_NAME' && (status=='active' || status=='idle')"
