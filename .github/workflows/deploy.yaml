@@ -79,7 +79,7 @@ jobs:
         id: upload
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.charm_name }}-rock
+          name: ${{ inputs.app_name  || inputs.charm_name }}-rock
           path: ./*.rock
 
   pack-and-upload-charm:
