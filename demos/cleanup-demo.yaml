@@ -1,0 +1,164 @@
+name: Clean up Demo
+
+on:
+  workflow_call:
+    inputs:
+      demo-id:
+        description: Unique demo ID to destroy.
+        required: true
+        type: string
+      cleanup-runs-on:
+        description: JSON array of runner labels for cleanup job.
+        required: false
+        type: string
+        default: '["self-hosted","self-hosted-linux-amd64-noble-private-endpoint-medium"]'
+      juju-controller-address:
+        description: Juju controller address used by Terraform provider.
+        required: false
+        type: string
+        default: jaas.ps7.canonical.com:443/k8s-jaas-ps7-jimm-jimm
+      juju-model-owner:
+        description: Juju model owner for data.juju_model.demos.
+        required: false
+        type: string
+        default: 795798e4-922f-49c7-9169-004ffc17df90@serviceaccount
+      juju-model-name:
+        description: Juju model name for data.juju_model.demos.
+        required: false
+        type: string
+        default: k8s-webteam-demos-default
+      s3-bucket:
+        description: Terraform state S3 bucket name.
+        required: false
+        type: string
+        default: webteam-demos-ps7-tfstate
+      s3-region:
+        description: Terraform state S3 region value.
+        required: false
+        type: string
+        default: prodstack7
+      s3-endpoint:
+        description: Terraform state S3 endpoint URL.
+        required: false
+        type: string
+        default: https://radosgw.ps7.canonical.com
+      terraform-backend-key-prefix:
+        description: Prefix for Terraform state key path.
+        required: false
+        type: string
+        default: demos
+      terraform-dir:
+        description: Directory containing demo terraform files.
+        required: false
+        type: string
+        default: terraform/demo
+      ghcr-package-name:
+        description: Optional GHCR package name override. Defaults to lowercased repository name.
+        required: false
+        type: string
+        default: ""
+    secrets:
+      demos_juju_client_id:
+        required: true
+      demos_juju_client_secret:
+        required: true
+      demos_s3_access_key_id:
+        required: true
+      demos_s3_secret_access_key:
+        required: true
+
+permissions:
+  packages: write
+  pull-requests: write
+
+jobs:
+  cleanup:
+    name: Cleanup Demo
+    runs-on: ${{ fromJSON(inputs.cleanup-runs-on) }}
+    env:
+      JUJU_CLIENT_ID: ${{ secrets.demos_juju_client_id }}
+      JUJU_CLIENT_SECRET: ${{ secrets.demos_juju_client_secret }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.demos_s3_access_key_id }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.demos_s3_secret_access_key }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Write Terraform base config
+        shell: bash
+        run: |
+          cat > "${{ inputs.terraform-dir }}/_base.tf" << 'EOF'
+          terraform {
+            required_providers {
+              juju = {
+                source  = "juju/juju"
+                version = "~> 1.1.0"
+              }
+            }
+            backend "s3" {
+              bucket = "${{ inputs.s3-bucket }}"
+              region = "${{ inputs.s3-region }}"
+              endpoints = {
+                s3 = "${{ inputs.s3-endpoint }}"
+              }
+              skip_region_validation      = true
+              skip_credentials_validation = true
+              skip_requesting_account_id  = true
+              skip_s3_checksum            = true
+              use_path_style              = true
+              use_lockfile                = true
+            }
+          }
+
+          provider "juju" {
+            controller_addresses = "${{ inputs.juju-controller-address }}"
+          }
+
+          data "juju_model" "demos" {
+            owner = "${{ inputs.juju-model-owner }}"
+            name  = "${{ inputs.juju-model-name }}"
+          }
+
+          variable "demo_id" {
+            description = "Unique identifier for this demo (e.g. my-repo-pr42)."
+            type        = string
+          }
+          EOF
+
+      - name: Terraform init
+        run: terraform -chdir=${{ inputs.terraform-dir }} init -backend-config="key=${{ inputs.terraform-backend-key-prefix }}/${{ inputs.demo-id }}/state"
+
+      - name: Terraform destroy
+        env:
+          TF_VAR_demo_id: ${{ inputs.demo-id }}
+        run: terraform -chdir=${{ inputs.terraform-dir }} destroy -auto-approve
+
+      - name: Install AWS cli
+        run: sudo snap install aws-cli --classic
+
+      - name: Delete Terraform state from S3
+        run: |
+          aws s3 rm "s3://${{ inputs.s3-bucket }}/${{ inputs.terraform-backend-key-prefix }}/${{ inputs.demo-id }}/state" \
+            --endpoint-url "${{ inputs.s3-endpoint }}" \
+            --region "${{ inputs.s3-region }}"
+
+      - name: Delete GHCR image
+        env:
+          GH_TOKEN: ${{ github.token }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.ghcr-package-name }}" ]; then
+            PACKAGE_NAME="${{ inputs.ghcr-package-name }}"
+          else
+            PACKAGE_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
+          fi
+
+          TAG="${{ inputs.demo-id }}"
+          VERSION_ID=$(gh api "/orgs/${{ github.repository_owner }}/packages/container/${PACKAGE_NAME}/versions" --paginate \
+            --jq ".[] | select(.metadata.container.tags[] == \"$TAG\") | .id" 2>/dev/null | head -1)
+
+          if [ -n "$VERSION_ID" ]; then
+            gh api --method DELETE "/orgs/${{ github.repository_owner }}/packages/container/${PACKAGE_NAME}/versions/${VERSION_ID}"
+          fi
