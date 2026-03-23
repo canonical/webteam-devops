@@ -4,9 +4,10 @@ on:
   workflow_call:
     inputs:
       demo-id:
-        description: Unique demo ID to destroy.
-        required: true
+        description: Unique demo ID to destroy. Defaults to normalized repo-based ID.
+        required: false
         type: string
+        default: ""
       cleanup-runs-on:
         description: JSON array of runner labels for cleanup job.
         required: false
@@ -126,12 +127,25 @@ jobs:
           }
           EOF
 
+      - name: Get demo ID
+        id: demo-id
+        shell: bash
+        run: |
+          repo_name=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g')
+          if [ -n "${{ inputs.demo-id }}" ]; then
+            echo "id=${{ inputs.demo-id }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "id=${repo_name}-pr${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "id=${repo_name}-${{ github.run_id }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Terraform init
-        run: terraform -chdir=${{ inputs.terraform-dir }} init -backend-config="key=${{ inputs.terraform-backend-key-prefix }}/${{ inputs.demo-id }}/state"
+        run: terraform -chdir=${{ inputs.terraform-dir }} init -backend-config="key=${{ inputs.terraform-backend-key-prefix }}/${{ steps.demo-id.outputs.id }}/state"
 
       - name: Terraform destroy
         env:
-          TF_VAR_demo_id: ${{ inputs.demo-id }}
+          TF_VAR_demo_id: ${{ steps.demo-id.outputs.id }}
         run: terraform -chdir=${{ inputs.terraform-dir }} destroy -auto-approve
 
       - name: Install AWS cli
@@ -139,7 +153,7 @@ jobs:
 
       - name: Delete Terraform state from S3
         run: |
-          aws s3 rm "s3://${{ inputs.s3-bucket }}/${{ inputs.terraform-backend-key-prefix }}/${{ inputs.demo-id }}/state" \
+          aws s3 rm "s3://${{ inputs.s3-bucket }}/${{ inputs.terraform-backend-key-prefix }}/${{ steps.demo-id.outputs.id }}/state" \
             --endpoint-url "${{ inputs.s3-endpoint }}" \
             --region "${{ inputs.s3-region }}"
 
@@ -155,7 +169,7 @@ jobs:
             PACKAGE_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
           fi
 
-          TAG="${{ inputs.demo-id }}"
+          TAG="${{ steps.demo-id.outputs.id }}"
           VERSION_ID=$(gh api "/orgs/${{ github.repository_owner }}/packages/container/${PACKAGE_NAME}/versions" --paginate \
             --jq ".[] | select(.metadata.container.tags[] == \"$TAG\") | .id" 2>/dev/null | head -1)
 

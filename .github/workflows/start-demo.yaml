@@ -124,12 +124,13 @@ jobs:
         id: demo-id
         shell: bash
         run: |
+          repo_name=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g')
           if [ -n "${{ inputs.demo-id }}" ]; then
             echo "id=${{ inputs.demo-id }}" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "id=${{ github.event.repository.name }}-pr${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+            echo "id=${repo_name}-pr${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
           else
-            echo "id=${{ github.event.repository.name }}-${{ github.run_id }}" >> "$GITHUB_OUTPUT"
+            echo "id=${repo_name}-${{ github.run_id }}" >> "$GITHUB_OUTPUT"
           fi
 
   comment-pending:
