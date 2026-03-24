@@ -38,23 +38,13 @@ on:
         required: false
         type: string
         default: jaas-ps7
-      juju-model:
-        description: Juju model in owner/name form used for juju deploy/refresh.
+      juju-model-name:
+        description: Juju model in owner/name form used by Juju and Terraform (e.g. owner/model).
         required: false
         type: string
         default: 795798e4-922f-49c7-9169-004ffc17df90@serviceaccount/k8s-webteam-demos-default
-      juju-model-owner:
-        description: Juju model owner for data.juju_model.demos.
-        required: false
-        type: string
-        default: 795798e4-922f-49c7-9169-004ffc17df90@serviceaccount
-      juju-model-name:
-        description: Juju model name for data.juju_model.demos.
-        required: false
-        type: string
-        default: k8s-webteam-demos-default
       juju-model-uuid:
-        description: Juju model UUID used by import scripts.
+        description: Juju model UUID used to import the demo app into Terraform state.
         required: true
         type: string
       s3-bucket:
@@ -82,11 +72,6 @@ on:
         required: false
         type: string
         default: terraform/demo
-      juju-imports-script:
-        description: Path to Juju imports script.
-        required: false
-        type: string
-        default: terraform/demo/juju_imports.sh
       charm-root:
         description: Directory containing charm source.
         required: false
@@ -284,7 +269,7 @@ jobs:
         shell: bash
         run: |
           CHARM_FILE=$(ls *.charm)
-          MODEL="${{ inputs.juju-model }}"
+          MODEL="${{ inputs.juju-model-name }}"
           RESOURCE_NAME="${{ inputs.charm-image-resource-name }}"
           if juju show-application "${{ needs.setup.outputs.demo-id }}" -m "$MODEL" &>/dev/null; then
             juju refresh --debug "${{ needs.setup.outputs.demo-id }}" \
@@ -330,8 +315,8 @@ jobs:
           }
 
           data "juju_model" "demos" {
-            owner = "${{ inputs.juju-model-owner }}"
-            name  = "${{ inputs.juju-model-name }}"
+            owner = split("/", "${{ inputs.juju-model-name }}")[0]
+            name  = split("/", "${{ inputs.juju-model-name }}")[1]
           }
 
           variable "demo_id" {
@@ -343,13 +328,15 @@ jobs:
       - name: Terraform init
         run: terraform -chdir=${{ inputs.terraform-dir }} init -backend-config="key=${{ inputs.terraform-backend-key-prefix }}/${{ needs.setup.outputs.demo-id }}/state"
 
-      - name: Run Juju imports
-        if: hashFiles(inputs.juju-imports-script) != ''
+      - name: Import demo app into Terraform state
         env:
-          TF_VAR_demo_id: ${{ needs.setup.outputs.demo-id }}
           DEMO_ID: ${{ needs.setup.outputs.demo-id }}
           MODEL_UUID: ${{ inputs.juju-model-uuid }}
-        run: bash "${{ inputs.juju-imports-script }}"
+        shell: bash
+        run: |
+          if ! terraform -chdir=${{ inputs.terraform-dir }} state show juju_application.demo >/dev/null 2>&1; then
+            terraform -chdir=${{ inputs.terraform-dir }} import juju_application.demo "${MODEL_UUID}:${DEMO_ID}"
+          fi
 
       - name: Terraform apply
         env:
