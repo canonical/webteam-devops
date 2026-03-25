@@ -40,9 +40,8 @@ on:
         default: jaas-ps7
       juju-model-name:
         description: Juju model in owner/name form used by Juju and Terraform (e.g. owner/model).
-        required: false
+        required: true
         type: string
-        default: 795798e4-922f-49c7-9169-004ffc17df90@serviceaccount/k8s-webteam-demos-default
       juju-model-uuid:
         description: Juju model UUID used to import the demo app into Terraform state.
         required: true

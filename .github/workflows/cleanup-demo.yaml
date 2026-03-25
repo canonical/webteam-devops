@@ -20,9 +20,8 @@ on:
         default: jaas.ps7.canonical.com:443/k8s-jaas-ps7-jimm-jimm
       juju-model-name:
         description: Juju model in owner/name form used by Juju and Terraform (e.g. owner/model).
-        required: false
+        required: true
         type: string
-        default: 795798e4-922f-49c7-9169-004ffc17df90@serviceaccount/k8s-webteam-demos-default
       s3-bucket:
         description: Terraform state S3 bucket name.
         required: false
