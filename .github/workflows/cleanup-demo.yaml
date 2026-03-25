@@ -18,16 +18,11 @@ on:
         required: false
         type: string
         default: jaas.ps7.canonical.com:443/k8s-jaas-ps7-jimm-jimm
-      juju-model-owner:
-        description: Juju model owner for data.juju_model.demos.
-        required: false
-        type: string
-        default: 795798e4-922f-49c7-9169-004ffc17df90@serviceaccount
       juju-model-name:
-        description: Juju model name for data.juju_model.demos.
+        description: Juju model in owner/name form used by Juju and Terraform (e.g. owner/model).
         required: false
         type: string
-        default: k8s-webteam-demos-default
+        default: 795798e4-922f-49c7-9169-004ffc17df90@serviceaccount/k8s-webteam-demos-default
       s3-bucket:
         description: Terraform state S3 bucket name.
         required: false
@@ -117,8 +112,8 @@ jobs:
           }
 
           data "juju_model" "demos" {
-            owner = "${{ inputs.juju-model-owner }}"
-            name  = "${{ inputs.juju-model-name }}"
+            owner = split("/", "${{ inputs.juju-model-name }}")[0]
+            name  = split("/", "${{ inputs.juju-model-name }}")[1]
           }
 
           variable "demo_id" {
