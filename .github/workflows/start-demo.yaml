@@ -334,7 +334,7 @@ jobs:
         shell: bash
         run: |
           if ! terraform -chdir=${{ inputs.terraform-dir }} state show juju_application.demo >/dev/null 2>&1; then
-            terraform -chdir=${{ inputs.terraform-dir }} import juju_application.demo "${MODEL_UUID}:${DEMO_ID}"
+            terraform -chdir=${{ inputs.terraform-dir }} import -input=false -var="demo_id=${DEMO_ID}" juju_application.demo "${MODEL_UUID}:${DEMO_ID}"
           fi
 
       - name: Terraform apply
