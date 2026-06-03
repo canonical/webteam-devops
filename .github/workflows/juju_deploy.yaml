@@ -66,7 +66,7 @@ jobs:
       - name: Deploy Application
         run: |
           export JUJU_MODEL=admin/${{ inputs.juju_model_name }}
-          export CHARM_NAME=${{ inputs.app_name }}
+          export CHARM_NAME=${{ inputs.charm_name }}
           export APP_NAME=${{ inputs.app_name || inputs.charm_name }}
           export CHANNEL=${{ inputs.channel }}
           export resource_revision=$(juju charm-resources $CHARM_NAME --channel=$CHANNEL | awk 'NR==2 {print $2}')

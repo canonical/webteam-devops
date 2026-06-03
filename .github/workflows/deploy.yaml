@@ -96,7 +96,7 @@ jobs:
         uses: canonical/setup-lxd@main
 
       - name: Setup charmcraft
-        run: sudo snap install charmcraft --classic --channel=latest/stable
+        run: sudo snap install charmcraft --classic --channel=3.x/stable
 
       - name: Fetch libs
         run: |
@@ -123,7 +123,7 @@ jobs:
       - name: Get Rock
         uses: actions/download-artifact@v4
         with:
-          name: ${{ inputs.app_name  || inputs.charm_name }}-rock
+          name: ${{ inputs.app_name || inputs.charm_name }}-rock
 
       - name: Set image URL
         id: set_image_url
@@ -132,8 +132,13 @@ jobs:
       - name: Push to GHCR
         run: skopeo --insecure-policy copy oci-archive:$(ls *.rock) docker://${{ steps.set_image_url.outputs.image_url }} --dest-creds "canonical:${{ secrets.GITHUB_TOKEN }}"
 
-      - name: Pull image into registry
-        run: docker pull ${{ steps.set_image_url.outputs.image_url }}
+      - name: Pull image and get ID
+        id: pull_image
+        run: |
+          docker pull ${{ steps.set_image_url.outputs.image_url }}
+          IMAGE_ID=$(docker images --format "{{.ID}}" ${{ steps.set_image_url.outputs.image_url }})
+          echo "image_id=$IMAGE_ID" >> $GITHUB_OUTPUT
+          echo "Pulled image ID: $IMAGE_ID"
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -155,7 +160,7 @@ jobs:
       - name: Upload OCI image resource
         env:
           CHARMCRAFT_AUTH: ${{ secrets.CHARMHUB_TOKEN }}
-        run: charmcraft upload-resource ${{ inputs.charm_name }} ${{ steps.resource_name.outputs.resource_name }} --image=$(docker images --format "{{.ID}}" | head -n 1) --verbosity=trace
+        run: charmcraft upload-resource ${{ inputs.charm_name }} ${{ steps.resource_name.outputs.resource_name }} --image=${{ steps.pull_image.outputs.image_id }} --verbosity=trace
 
       - name: Attach resource to charm and release
         env:
