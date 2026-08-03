@@ -68,15 +68,21 @@ data "external" "gateway_ip" {
 # Passthrough ingress: HAProxy terminates TLS (via its certificates relation)
 # and routes HTTP to the gateway, which performs host-based routing to each
 # demo app.
+#
+# This runs on the machine substrate (alongside HAProxy) rather than on
+# Kubernetes. The ingress-configurator's "integrator mode" (backend-addresses /
+# backend-ports config) is only supported on machine substrates; on Kubernetes
+# the charm requires an `ingress` relation from a workload app and blocks with
+# "Ingress relation required on Kubernetes substrate.". The gateway is not an
+# ingress requirer, so we deploy the passthrough as a machine charm and feed it
+# the gateway IP via config.
 resource "juju_application" "passthrough_ingress" {
-  model_uuid  = juju_model.demos.uuid
+  model_uuid  = module.ingress_ps7.machine_model_uuid
   units       = var.app_units
 
   charm {
     name      = "ingress-configurator"
   }
-
-  trust = true
 
   config = {
     allow-http        = true
