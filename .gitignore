@@ -2,6 +2,8 @@
 .terraform
 .terraform.lock.hcl
 *.tfstate*
+*.tfvars
+*.auto.tfvars
 
 # Editors
 .vscode
@@ -12,3 +14,7 @@
 # OS
 .DS_Store
 Thumbs.db
+
+# Python and environment vars
+*.env
+**/__pycache__
