@@ -10,7 +10,7 @@ launched a Multipass VM from the root of this project (where the `juju_local.yam
 
 ## How to deploy
 
-SSH into the Multipass VM and go into this project's `terraform/local-ps7` directory.
+SSH into the Multipass VM and go into this project's `terraform/local/demos` directory.
 
 ```bash
 terraform init
@@ -39,8 +39,7 @@ sudo configure-ingress-forwarding
 ```
 
 This reads the Terraform outputs and installs a static nftables DNAT rule
-(`VM_IP:80,443 -> HAPROXY_IP`), persisted across reboots via a systemd oneshot
-unit. Tear it down with `--remove`.
+(`VM_IP:80,443 -> HAPROXY_IP`).
 
 ### 2. On your host laptop — resolve the hostname
 
@@ -50,8 +49,7 @@ container_ca_trust <vm-name>            # set up certs to make SSO work
 ```
 
 This writes a managed block into your `/etc/hosts` mapping the ingress
-hostnames to the VM. Works on Linux and macOS; only needs `multipass`. Remove
-it with `--remove`.
+hostnames to the VM. Works on Linux and macOS; only needs `multipass`.
 
 Then you can open any of the demos in your browser.
 
