@@ -1,0 +1,64 @@
+name: Deploy with Juju to PS7
+
+on:
+  workflow_call:
+    inputs:
+      charm_name:
+        required: true
+        type: string
+      channel:
+        required: true
+        type: string
+      terraform_dir:
+        required: true
+        type: string
+      resource_name:
+        required: true
+        type: string
+      resource_revision_number:
+        required: true
+        type: string
+      juju_controller_name:
+        required: true
+        type: string
+      juju_model_name:
+        required: true
+        type: string
+    secrets:
+      VAULT_APPROLE_ROLE_ID:
+        required: true
+      VAULT_APPROLE_SECRET_ID:
+        required: true
+
+jobs:
+  deploy:
+    name: Deploy
+    if: always() && !failure() && !cancelled()
+    runs-on: [self-hosted, self-hosted-linux-amd64-jammy-private-endpoint-medium]
+    steps:
+      - name: Checkout project repo
+        uses: actions/checkout@v4
+        with:
+          path: project
+
+      - name: Checkout webteam-devops
+        uses: actions/checkout@v4
+        with:
+          path: devops
+          repository: canonical/webteam-devops
+
+      - name: Merge terraform files
+        run: |
+          mkdir terraform
+          ./devops/merge_terraform_dirs.py devops/${{ inputs.terraform_dir }} project/${{ inputs.terraform_dir }} -o terraform
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform init
+        run: terraform -chdir=terraform init
+
+      - name: Terraform apply
+        env:
+          TF_VAR_approle_role_id: ${{ secrets.VAULT_APPROLE_ROLE_ID }}
+          TF_VAR_approle_secret_id: ${{ secrets.VAULT_APPROLE_SECRET_ID }}
+        run: terraform -chdir=terraform apply -auto-approve

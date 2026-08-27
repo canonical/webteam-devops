@@ -1,4 +1,4 @@
-name: Deploy with Juju
+name: Deploy with Juju to PS6
 
 on:
   workflow_call:
@@ -17,6 +17,12 @@ on:
       channel:
         required: true
         type: string
+      resource_name:
+        required: true
+        type: string
+      resource_revision_number:
+        required: true
+        type: string
       juju_controller_name:
         required: true
         type: string
@@ -33,8 +39,8 @@ jobs:
   deploy:
     runs-on: [self-hosted, self-hosted-linux-amd64-jammy-private-endpoint-medium]
     environment:
-      name: ${{ inputs.environment  }}
-      url: ${{ inputs.environment_url  }}
+      name: ${{ inputs.environment }}
+      url: ${{ inputs.environment_url }}
     steps:
       - name: Install Dependencies
         run: |
@@ -64,7 +70,6 @@ jobs:
           export JUJU_MODEL=admin/${{ inputs.juju_model_name }}
           export CHARM_NAME=${{ inputs.charm_name }}
           export CHANNEL=${{ inputs.channel }}
-          export resource_revision=$(juju charm-resources $CHARM_NAME --channel=$CHANNEL | awk 'NR==2 {print $2}')
           juju refresh $CHARM_NAME --channel=$CHANNEL
-          juju refresh $CHARM_NAME --channel=$CHANNEL --resource flask-app-image=$resource_revision
+          juju refresh $CHARM_NAME --channel=$CHANNEL --resource ${{ inputs.resource_name }}=${{ inputs.resource_revision_number }}
           juju wait-for application $CHARM_NAME --query="name=='$CHARM_NAME' && (status=='active' || status=='idle')"

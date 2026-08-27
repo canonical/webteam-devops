@@ -1,0 +1,14 @@
+# Terraform
+.terraform
+.terraform.lock.hcl
+*.tfstate*
+
+# Editors
+.vscode
+
+# Coding agents
+.opencode
+
+# OS
+.DS_Store
+Thumbs.db
