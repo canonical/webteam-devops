@@ -34,15 +34,17 @@ jobs:
     runs-on: [self-hosted, self-hosted-linux-amd64-jammy-private-endpoint-medium]
     steps:
       - name: Checkout project repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           path: project
 
       - name: Checkout webteam-devops
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           path: devops
           repository: canonical/webteam-devops
+          # todo: remove before merging to main
+          ref: ps7-deployment
 
       - name: Merge terraform files
         run: |

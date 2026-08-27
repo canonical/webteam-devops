@@ -36,7 +36,7 @@ jobs:
       charm_changed: ${{ steps.check.outputs.charm_changed }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -61,7 +61,7 @@ jobs:
     environment: ${{ inputs.environment }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Setup LXD
         uses: canonical/setup-lxd@main
@@ -74,7 +74,7 @@ jobs:
 
       - name: Upload rock
         id: upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.charm_name }}-rock
           path: ./*.rock
@@ -87,7 +87,7 @@ jobs:
     environment: ${{ inputs.environment }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Setup LXD
         uses: canonical/setup-lxd@main
@@ -121,7 +121,7 @@ jobs:
       revision_number: ${{ steps.release_charm.outputs.revision_number }}
     steps:
       - name: Get Rock
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: ${{ inputs.charm_name }}-rock
 
@@ -141,7 +141,7 @@ jobs:
           echo "Pulled image ID: $IMAGE_ID"
 
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Determine resource name
         id: resource_name
