@@ -43,6 +43,7 @@ on:
 jobs:
   setup:
     name: Set up
+    runs-on: ubuntu-latest
     outputs:
       juju_controller_name: ${{ steps.setup-vars.outputs.juju_controller_name }}
       juju_model_name: ${{ steps.setup-vars.outputs.juju_model_name }}
@@ -92,10 +93,10 @@ jobs:
     with:
       charm_name: ${{ inputs.charm_name }}
       channel: ${{ inputs.channel }}
+      charm_revision: ${{ needs.pack-and-release.outputs.revision_number }}
       terraform_dir: ${{ inputs.terraform_dir }}
-      revision_number: ${{ needs.publish-image-and-release-charm.outputs.revision_number }}
-      resource_name: ${{ needs.publish-image-and-release-charm.outputs.resource_name }}
-      resource_revision_number: ${{ needs.publish-image-and-release-charm.outputs.resource_revision_number }}
+      resource_name: ${{ needs.pack-and-release.outputs.resource_name }}
+      resource_revision_number: ${{ needs.pack-and-release.outputs.resource_revision_number }}
     secrets:
       VAULT_APPROLE_ROLE_ID: ${{ secrets.VAULT_APPROLE_ROLE_ID }}
       VAULT_APPROLE_SECRET_ID: ${{ secrets.VAULT_APPROLE_SECRET_ID }}
