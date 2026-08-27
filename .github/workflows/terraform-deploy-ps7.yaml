@@ -9,6 +9,9 @@ on:
       channel:
         required: true
         type: string
+      charm_revision:
+        required: true
+        type: string
       terraform_dir:
         required: true
         type: string
@@ -16,12 +19,6 @@ on:
         required: true
         type: string
       resource_revision_number:
-        required: true
-        type: string
-      juju_controller_name:
-        required: true
-        type: string
-      juju_model_name:
         required: true
         type: string
     secrets:
@@ -59,6 +56,11 @@ jobs:
 
       - name: Terraform apply
         env:
+          TF_VAR_charm_name: ${{ inputs.charm_name }}
+          TF_VAR_charm_channel: ${{ inputs.channel }}
+          TF_VAR_charm_revision: ${{ inputs.charm_revision }}
+          TF_VAR_resource_name: ${{ inputs.resource_name }}
+          TF_VAR_resource_revision: ${{ inputs.resource_revision_number }}
           TF_VAR_approle_role_id: ${{ secrets.VAULT_APPROLE_ROLE_ID }}
           TF_VAR_approle_secret_id: ${{ secrets.VAULT_APPROLE_SECRET_ID }}
         run: terraform -chdir=terraform apply -auto-approve

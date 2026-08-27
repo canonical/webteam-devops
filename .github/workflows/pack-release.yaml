@@ -13,10 +13,16 @@ on:
         required: false
         default: ''
         type: string
-
     secrets:
       CHARMHUB_TOKEN:
         required: true
+    outputs:
+      revision_number:
+        value: ${{ jobs.publish-image-and-release-charm.outputs.revision_number }}
+      resource_name:
+        value: ${{ jobs.publish-image-and-release-charm.outputs.resource_name }}
+      resource_revision_number:
+        value: ${{ jobs.publish-image-and-release-charm.outputs.resource_revision_number }}
 
 jobs:
   setup:
