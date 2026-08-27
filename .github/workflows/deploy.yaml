@@ -31,7 +31,10 @@ on:
         required: false
         default: ''
         type: string
-
+      force_charm_build:
+        required: false
+        default: false
+        type: boolean
     secrets:
       VAULT_APPROLE_ROLE_ID:
         required: true
@@ -64,6 +67,7 @@ jobs:
       charm_name: ${{ inputs.charm_name }}
       channel: ${{ inputs.channel }}
       environment: ${{ inputs.environment }}
+      force_charm_build: ${{ inputs.force_charm_build }}
     secrets:
       CHARMHUB_TOKEN: ${{ secrets.CHARMHUB_TOKEN }}
 

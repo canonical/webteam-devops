@@ -13,6 +13,10 @@ on:
         required: false
         default: ''
         type: string
+      force_charm_build:
+        required: false
+        default: false
+        type: boolean
     secrets:
       CHARMHUB_TOKEN:
         required: true
@@ -34,15 +38,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Check for charm/ changes
         id: check
         run: |
-          if git diff --name-only HEAD~ ${{ github.sha }} | grep '^charm/'; then
-            echo "charm_changed=true" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual runs (workflow_dispatch)
+            echo "charm_changed=${{ inputs.force_charm_build }}" >> "$GITHUB_OUTPUT"
           else
-            echo "charm_changed=false" >> "$GITHUB_OUTPUT"
+            if git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -q '^charm/'; then
+              echo "charm_changed=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "charm_changed=false" >> "$GITHUB_OUTPUT"
+            fi
           fi
 
   pack-rock:
