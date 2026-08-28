@@ -83,3 +83,19 @@ data "juju_secret" "test_data_source" {
   model_uuid = data.juju_model.service_model.uuid
 >>>>>>> a6c06ad (Modify merge_terraform_dirs script)
 }
+
+resource "juju_application" "ingress_configurator" {
+  model_uuid  = data.juju_model.service_model.uuid
+  units       = 1
+
+  charm {
+    name      = "ingress-configurator"
+    channel   = "latest/stable"
+  }
+
+  trust = true
+
+  config = {
+    hostname  = "staging.rocks.ubuntu.com"
+  }
+}
