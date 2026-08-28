@@ -52,6 +52,8 @@ jobs:
           ./devops/merge_terraform_dirs.py devops/${{ inputs.terraform_dir }} project/${{ inputs.terraform_dir }} -o terraform
 
       - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
 
       - name: Terraform init
         run: terraform -chdir=terraform init
