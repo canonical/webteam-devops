@@ -171,7 +171,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: "*.rock"
-          key: rock-${{ hashFiles('rockcraft.yaml', 'app.py', 'requirements.txt') }}
+          # Rockcraft parts commonly use `source: .` (the whole repo) to build
+          # the image (e.g. running `yarn build` over the full frontend
+          # source), so hashing a hardcoded subset of files (rockcraft.yaml,
+          # app.py, requirements.txt) misses changes elsewhere in the repo and
+          # causes stale rocks to be served from cache. Key on the exact
+          # commit that was checked out instead, so the cache is only reused
+          # when the source tree is byte-for-byte identical.
+          key: rock-${{ github.sha }}
 
       - name: Pack rock
         if: steps.cache-rock.outputs.cache-hit != 'true'
