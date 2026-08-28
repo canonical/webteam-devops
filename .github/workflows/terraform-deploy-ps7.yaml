@@ -33,6 +33,10 @@ jobs:
     if: always() && !failure() && !cancelled()
     runs-on: [self-hosted, self-hosted-linux-amd64-jammy-private-endpoint-medium]
     steps:
+      - name: Install Dependencies
+        run: |
+          sudo snap install vault --classic
+
       - name: Checkout project repo
         uses: actions/checkout@v7
         with:
