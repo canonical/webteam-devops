@@ -171,7 +171,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: "*.rock"
-          key: rock-${{ hashFiles('rockcraft.yaml', 'app.py', 'requirements.txt') }}
+          key: rock-${{ github.sha }}
 
       - name: Pack rock
         if: steps.cache-rock.outputs.cache-hit != 'true'
