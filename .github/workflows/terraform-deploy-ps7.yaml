@@ -59,17 +59,11 @@ jobs:
         with:
           terraform_wrapper: false
 
-      - name: Terraform init
+      - name: Terraform init and apply
         env:
           VAULT_ROLE_ID: ${{ secrets.VAULT_APPROLE_ROLE_ID }}
           VAULT_SECRET_ID: ${{ secrets.VAULT_APPROLE_SECRET_ID }}
-        run: |
-          # authenticate to vault
-          source ./devops/${{ inputs.terraform_dir }}/s3_credentials_jaas.sh
-          terraform -chdir=terraform init
-
-      - name: Terraform apply
-        env:
+          # TF variables
           TF_VAR_charm_name: ${{ inputs.charm_name }}
           TF_VAR_charm_channel: ${{ inputs.channel }}
           TF_VAR_charm_revision: ${{ inputs.charm_revision }}
@@ -77,4 +71,8 @@ jobs:
           TF_VAR_resource_revision: ${{ inputs.resource_revision_number }}
           TF_VAR_approle_role_id: ${{ secrets.VAULT_APPROLE_ROLE_ID }}
           TF_VAR_approle_secret_id: ${{ secrets.VAULT_APPROLE_SECRET_ID }}
-        run: terraform -chdir=terraform apply -auto-approve
+        run: |
+          # authenticate to vault
+          source ./devops/${{ inputs.terraform_dir }}/s3_credentials_jaas.sh
+          terraform -chdir=terraform init
+          terraform -chdir=terraform apply -auto-approve
