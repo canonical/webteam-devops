@@ -28,7 +28,7 @@ provider "vault" {
 }
 ephemeral "vault_kv_secret_v2" "ps7_jaas_credentials" {
   mount = "secret"
-  name  = "groups/canonical-webdesign/service_account"
+  name  = "groups/canonical-webdesign-marketplace/service_account"
 }
 
 provider "juju" {
