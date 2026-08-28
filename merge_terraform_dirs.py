@@ -55,13 +55,21 @@ def main():
     path_2_exists = os.path.isdir(args.path_2)
     path_out_exists = os.path.isdir(args.out)
 
-    if not path_1_exists or not path_2_exists or not path_out_exists:
+    if not path_1_exists and not path_2_exists:
         parser.print_help()
         exit(1)
+    if not path_out_exists:
+        os.makedirs(args.out, exist_ok=True)
+
+    dirs = [
+        args.path_1 if path_1_exists else None,
+        args.path_2 if path_2_exists else None,
+    ]
+    dirs = [dir for dir in dirs if dir is not None]
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        copy_or_append_files(args.path_1, tmpdir)
-        copy_or_append_files(args.path_2, tmpdir)
+        for dir in dirs:
+            copy_or_append_files(dir, tmpdir)
         # move the merged files to the output directory
         (dirpath, _, files) = next(os.walk(tmpdir))
         for file in files:

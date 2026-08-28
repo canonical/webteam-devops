@@ -8,6 +8,7 @@ data "juju_model" "service_model" {
   name  = local.juju_model_name
 }
 
+<<<<<<< HEAD
 data "juju_charm" "rocks_storefront_charm" {
   charm   = var.charm_name
   channel = "latest/beta"
@@ -76,4 +77,9 @@ resource "juju_integration" "ingress_haproxy" {
   application {
     offer_url = "795798e4-922f-49c7-9169-004ffc17df90@serviceaccount/prod-cloud-ingress-ps7.ingress-ps7-webdesign"
   }
+=======
+data "juju_secret" "test_data_source" {
+  name       = "test_secret"
+  model_uuid = data.juju_model.service_model.uuid
+>>>>>>> a6c06ad (Modify merge_terraform_dirs script)
 }
