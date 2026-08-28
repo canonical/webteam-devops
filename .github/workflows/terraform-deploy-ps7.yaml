@@ -1,0 +1,78 @@
+name: Deploy with Juju to PS7
+
+on:
+  workflow_call:
+    inputs:
+      charm_name:
+        required: true
+        type: string
+      channel:
+        required: true
+        type: string
+      charm_revision:
+        required: true
+        type: string
+      terraform_dir:
+        required: true
+        type: string
+      resource_name:
+        required: true
+        type: string
+      resource_revision_number:
+        required: true
+        type: string
+    secrets:
+      VAULT_APPROLE_ROLE_ID:
+        required: true
+      VAULT_APPROLE_SECRET_ID:
+        required: true
+
+jobs:
+  deploy:
+    name: Deploy
+    if: always() && !failure() && !cancelled()
+    runs-on: [self-hosted, self-hosted-linux-amd64-jammy-private-endpoint-medium]
+    steps:
+      - name: Install Dependencies
+        run: |
+          sudo snap install vault --classic
+
+      - name: Checkout project repo
+        uses: actions/checkout@v7
+        with:
+          path: project
+
+      - name: Checkout webteam-devops
+        uses: actions/checkout@v7
+        with:
+          path: devops
+          repository: canonical/webteam-devops
+          # todo: remove before merging to main
+          ref: ps7-deployment
+
+      - name: Merge terraform files
+        run: |
+          mkdir terraform
+          ./devops/merge_terraform_dirs.py devops/${{ inputs.terraform_dir }} project/${{ inputs.terraform_dir }} -o terraform
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform init and apply
+        env:
+          VAULT_ROLE_ID: ${{ secrets.VAULT_APPROLE_ROLE_ID }}
+          VAULT_SECRET_ID: ${{ secrets.VAULT_APPROLE_SECRET_ID }}
+          # TF variables
+          TF_VAR_charm_name: ${{ inputs.charm_name }}
+          TF_VAR_charm_channel: ${{ inputs.channel }}
+          TF_VAR_charm_revision: ${{ inputs.charm_revision }}
+          TF_VAR_resource_name: ${{ inputs.resource_name }}
+          TF_VAR_resource_revision: ${{ inputs.resource_revision_number }}
+          TF_VAR_approle_role_id: ${{ secrets.VAULT_APPROLE_ROLE_ID }}
+          TF_VAR_approle_secret_id: ${{ secrets.VAULT_APPROLE_SECRET_ID }}
+        run: |
+          # authenticate to vault
+          source ./devops/${{ inputs.terraform_dir }}/s3_credentials_jaas.sh
+          terraform -chdir=terraform init
+          terraform -chdir=terraform apply -auto-approve

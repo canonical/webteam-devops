@@ -5,10 +5,15 @@
 
 export VAULT_ADDR=https://vault.ps7.admin.canonical.com
 
-if ! vault token lookup 1>/dev/null 2>&1;
-then
-    echo "No valid token found, logging in to https://vault.ps7.admin.canonical.com with OIDC"
-    vault login -method=oidc
+if ! vault token lookup 1>/dev/null 2>&1; then
+    # true if the length of the string is non-zero
+    if [ -n "$VAULT_ROLE_ID" ] && [ -n "$VAULT_SECRET_ID" ]; then
+        echo "Authenticating to $VAULT_ADDR with AppRole"
+        vault write -f -field=token auth/approle/login role_id="$VAULT_ROLE_ID" secret_id="$VAULT_SECRET_ID" | vault login -
+    else
+        echo "No valid token found, logging in to $VAULT_ADDR with OIDC"
+        vault login -method=oidc
+    fi
 fi
 
 AWS_ACCESS_KEY_ID=$(vault kv get -field=access_key secret/services/k8s-stg-marketplace-default/s3) || return 0
