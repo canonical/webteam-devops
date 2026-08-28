@@ -7,3 +7,8 @@ data "juju_model" "service_model" {
   owner = local.juju_model_owner
   name  = local.juju_model_name
 }
+
+data "juju_secret" "test_data_source" {
+  name       = "test_secret"
+  model_uuid = data.juju_model.service_model.uuid
+}
