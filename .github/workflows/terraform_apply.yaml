@@ -1,0 +1,43 @@
+name: Apply Terraform Config
+
+on:
+  workflow_call:
+    inputs:
+      terraform_dir:
+        required: true
+        type: string
+    secrets:
+      VAULT_APPROLE_ROLE_ID:
+        required: true
+      VAULT_APPROLE_SECRET_ID:
+        required: true
+
+jobs:
+  deploy:
+    name: Terraform Apply
+    if: always() && !failure() && !cancelled()
+    runs-on: [self-hosted, self-hosted-linux-amd64-jammy-private-endpoint-medium]
+    steps:
+      - name: Install Dependencies
+        run: |
+          sudo snap install vault --classic
+
+      - name: Checkout webteam-devops
+        uses: actions/checkout@v7
+        with:
+          path: devops
+          repository: canonical/webteam-devops
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform init and apply
+        env:
+          VAULT_ROLE_ID: ${{ secrets.VAULT_APPROLE_ROLE_ID }}
+          VAULT_SECRET_ID: ${{ secrets.VAULT_APPROLE_SECRET_ID }}
+        run: |
+          # authenticate to vault
+          source ./devops/${{ inputs.terraform_dir }}/s3_credentials_jaas.sh
+          terraform -chdir=terraform init
+          terraform -chdir=terraform apply -auto-approve
