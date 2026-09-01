@@ -11,12 +11,6 @@ variable "approle_secret_id" {
   sensitive   = true
 }
 
-variable "units" {
-  description = "Number of units per application."
-  type        = number
-  default     = 2
-}
-
 variable "hostname" {
   description = "Hostname the ingress-configurator advertises to HAProxy for this app."
   type        = string
@@ -38,16 +32,5 @@ variable "charm_name" {
 variable "charm_channel" {
   description = "Name of the channel for the charmed application."
   type        = string
-  default     = "latest/stable"
-}
-
-variable "charm_revision" {
-  description = "Revision number of the charm."
-  type        = string
-}
-
-variable "resource_name" {
-  description = "Name of the resource used by the charmed application."
-  type        = string
-  default     = "app-image"
+  default     = "latest/beta"
 }

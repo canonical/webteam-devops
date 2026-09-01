@@ -15,7 +15,7 @@ data "juju_charm" "rocks_storefront_charm" {
 
 resource "juju_application" "rocks_storefront" {
   model_uuid = data.juju_model.service_model.uuid
-  units      = var.units
+  units      = 2
 
   charm {
     name     = var.charm_name
