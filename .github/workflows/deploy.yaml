@@ -103,9 +103,10 @@ jobs:
         run: charmcraft pack -v --project-dir ./charm
 
       - name: Upload charm
+        working-directory: ./charm
         env:
           CHARMCRAFT_AUTH: ${{ secrets.CHARMHUB_TOKEN }}
-        run: charmcraft upload ./charm/*.charm
+        run: charmcraft upload *.charm
 
   publish-image-and-release-charm:
     name: Publish OCI Image and Release Charm
