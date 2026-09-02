@@ -11,6 +11,7 @@ data "juju_model" "service_model" {
 data "juju_charm" "rocks_storefront_charm" {
   charm   = var.charm_name
   channel = "latest/stable"
+  base    = "ubuntu@24.04"
 }
 
 resource "juju_application" "rocks_storefront" {
