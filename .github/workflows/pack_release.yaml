@@ -110,7 +110,7 @@ jobs:
       - name: Upload charm
         env:
           CHARMCRAFT_AUTH: ${{ secrets.CHARMHUB_TOKEN }}
-        run: charmcraft upload ./*.charm
+        run: charmcraft upload ./charm/*.charm
 
   publish-image-and-release-charm:
     name: Publish OCI Image and Release Charm
