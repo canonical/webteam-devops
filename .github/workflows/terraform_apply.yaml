@@ -25,7 +25,6 @@ jobs:
       - name: Checkout webteam-devops
         uses: actions/checkout@v7
         with:
-          path: devops
           repository: canonical/webteam-devops
 
       - uses: hashicorp/setup-terraform@v4
@@ -38,6 +37,6 @@ jobs:
           VAULT_SECRET_ID: ${{ secrets.VAULT_APPROLE_SECRET_ID }}
         run: |
           # authenticate to vault
-          source ./devops/${{ inputs.terraform_dir }}/s3_credentials_jaas.sh
-          terraform -chdir=terraform init
-          terraform -chdir=terraform apply -auto-approve
+          source ./${{ inputs.terraform_dir }}/s3_credentials_jaas.sh
+          terraform -chdir=${{ inputs.terraform_dir }} init
+          terraform -chdir=${{ inputs.terraform_dir }} apply -auto-approve
