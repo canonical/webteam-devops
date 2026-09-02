@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.6.6"
+  required_version = ">= 1.10.0"
   required_providers {
     vault = {
       source  = "hashicorp/vault"
@@ -7,7 +7,7 @@ terraform {
     }
     juju = {
       source  = "juju/juju"
-      version = "~> 1.1.0"
+      version = "~> 1.5.6"
     }
   }
 }
