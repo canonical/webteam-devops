@@ -62,7 +62,7 @@ jobs:
   pack-and-release:
     name: Pack and Release
     if: always() && !failure() && !cancelled()
-    uses: ./.github/workflows/pack-release.yaml
+    uses: ./.github/workflows/pack_release.yaml
     with:
       charm_name: ${{ inputs.charm_name }}
       channel: ${{ inputs.channel }}
@@ -93,14 +93,9 @@ jobs:
     name: Deploy to PS7 Environment
     needs: [pack-and-release]
     if: always() && !failure() && !cancelled() && inputs.deploy_method == 'terraform'
-    uses: ./.github/workflows/terraform-deploy-ps7.yaml
+    uses: ./.github/workflows/terraform_apply.yaml
     with:
-      charm_name: ${{ inputs.charm_name }}
-      channel: ${{ inputs.channel }}
-      charm_revision: ${{ needs.pack-and-release.outputs.revision_number }}
       terraform_dir: ${{ inputs.terraform_dir }}
-      resource_name: ${{ needs.pack-and-release.outputs.resource_name }}
-      resource_revision_number: ${{ needs.pack-and-release.outputs.resource_revision_number }}
     secrets:
       VAULT_APPROLE_ROLE_ID: ${{ secrets.VAULT_APPROLE_ROLE_ID }}
       VAULT_APPROLE_SECRET_ID: ${{ secrets.VAULT_APPROLE_SECRET_ID }}
