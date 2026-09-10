@@ -1,6 +1,6 @@
 locals {
   juju_model_owner = "795798e4-922f-49c7-9169-004ffc17df90@serviceaccount"
-  juju_model_name  = "k8s-prod-marketplace-default"
+  juju_model_name  = "k8s-prod-marketplace-rocks"
 }
 
 data "juju_model" "service_model" {

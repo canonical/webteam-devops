@@ -1,7 +1,7 @@
 terraform {
   backend "s3" {
     key    = "state"
-    bucket = "k8s-stg-marketplace-default-tfstate"
+    bucket = "k8s-stg-marketplace-rocks-tfstate"
     region = "prodstack7"
     endpoints = {
       s3 = "https://radosgw.ps7.canonical.com"

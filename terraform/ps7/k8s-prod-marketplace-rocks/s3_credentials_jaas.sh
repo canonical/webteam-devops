@@ -16,8 +16,8 @@ if ! vault token lookup 1>/dev/null 2>&1; then
     fi
 fi
 
-AWS_ACCESS_KEY_ID=$(vault kv get -field=access_key secret/services/k8s-prod-marketplace-default/s3) || return 0
-AWS_SECRET_ACCESS_KEY=$(vault kv get -field=secret_key secret/services/k8s-prod-marketplace-default/s3) || return 0
+AWS_ACCESS_KEY_ID=$(vault kv get -field=access_key secret/services/k8s-prod-marketplace-rocks/s3) || return 0
+AWS_SECRET_ACCESS_KEY=$(vault kv get -field=secret_key secret/services/k8s-prod-marketplace-rocks/s3) || return 0
 export AWS_ACCESS_KEY_ID
 export AWS_SECRET_ACCESS_KEY
-echo "Backend credentials set for k8s-prod-marketplace-default in cloud ps7"
+echo "Backend credentials set for k8s-prod-marketplace-rocks in cloud ps7"
