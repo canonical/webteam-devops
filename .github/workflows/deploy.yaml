@@ -75,7 +75,7 @@ jobs:
     name: Deploy to PS6 Environment
     needs: [setup, pack-and-release]
     if: always() && !failure() && !cancelled() && inputs.deploy_method == 'juju'
-    uses: ./.github/workflows/juju-deploy-ps6.yaml
+    uses: ./.github/workflows/juju_deploy_ps6.yaml
     with:
       charm_name: ${{ inputs.charm_name }}
       channel: ${{ inputs.channel }}
