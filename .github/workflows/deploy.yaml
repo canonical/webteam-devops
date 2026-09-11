@@ -44,6 +44,18 @@ on:
         required: true
 
 jobs:
+  validate:
+    name: Validate inputs
+    runs-on: ubuntu-latest
+    steps:
+      # Cancel the full job if deploy_method is not supported
+      - name: Validate deploy_method
+        run: |
+          if [ "${{ inputs.deploy_method }}" != "juju" ] && [ "${{ inputs.deploy_method }}" != "terraform" ]; then
+            echo "deploy_method must be 'juju' or 'terraform'"
+            exit 1
+          fi
+
   setup:
     name: Set up
     runs-on: ubuntu-latest
@@ -79,8 +91,8 @@ jobs:
     with:
       charm_name: ${{ inputs.charm_name }}
       channel: ${{ inputs.channel }}
-      resource_name: ${{ needs.publish-image-and-release-charm.outputs.resource_name }}
-      resource_revision_number: ${{ needs.publish-image-and-release-charm.outputs.resource_revision_number }}
+      resource_name: ${{ needs.pack-and-release.outputs.resource_name }}
+      resource_revision_number: ${{ needs.pack-and-release.outputs.resource_revision_number }}
       juju_controller_name: ${{ needs.setup.outputs.juju_controller_name }}
       juju_model_name: ${{ needs.setup.outputs.juju_model_name }}
       environment: ${{ inputs.environment }}

@@ -55,6 +55,10 @@ The following secrets must be defined in the calling workflow or repository (eit
     needs: setup
     name: Deploy
     uses: canonical/webteam-devops/.github/workflows/deploy.yaml@main
+    permissions:
+      packages: write
+      id-token: write
+      contents: read
     with:
       charm_name: snapcraft
       channel: latest/edge
@@ -73,9 +77,17 @@ The following secrets must be defined in the calling workflow or repository (eit
     needs: setup
     name: Deploy PS7
     uses: canonical/webteam-devops/.github/workflows/deploy.yaml@main
+    permissions:
+      packages: write
+      id-token: write
+      contents: read
     with:
       charm_name: rocks-storefront
       channel: latest/stable
       deploy_method: terraform
       terraform_dir: terraform/ps7/k8s-prod-marketplace
+    secrets:
+      VAULT_APPROLE_ROLE_ID: ${{ secrets.VAULT_APPROLE_ROLE_ID }}
+      VAULT_APPROLE_SECRET_ID: ${{ secrets.VAULT_APPROLE_SECRET_ID }}
+      CHARMHUB_TOKEN: ${{ secrets.CHARMHUB_TOKEN }}
 ```

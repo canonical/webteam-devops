@@ -6,6 +6,10 @@ on:
       terraform_dir:
         required: true
         type: string
+      terraform_github_repo:
+        required: false
+        type: string
+        default: "canonical/webteam-devops"
     secrets:
       VAULT_APPROLE_ROLE_ID:
         required: true
@@ -25,7 +29,7 @@ jobs:
       - name: Checkout webteam-devops
         uses: actions/checkout@v7
         with:
-          repository: canonical/webteam-devops
+          repository: ${{ inputs.terraform_github_repo }}
 
       - uses: hashicorp/setup-terraform@v4
         with:

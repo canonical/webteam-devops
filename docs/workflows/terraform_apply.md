@@ -16,6 +16,7 @@ These inputs must always be provided by the workflow that calls this one:
 | Input | Type | Required | Description |
 |-------|------|----------|-------------|
 | `terraform_dir` | `string` | ✅ | Path to the directory that contains the terraform configuration to deploy. |
+| `terraform_github_repo` | `string` | ❌ | If you have your configuration files in a different GitHub repository, specify it with this input. |
 
 ---
 
@@ -47,6 +48,7 @@ To get these secrets from Vault follow the steps
       contents: read
     with:
       terraform_dir: ${{ needs.setup.outputs.terraform_dir }}
+      terraform_github_repo: canonical/my-project-terraform-config-repo
     secrets:
       VAULT_APPROLE_ROLE_ID: ${{ secrets.VAULT_APPROLE_ROLE_ID }}
       VAULT_APPROLE_SECRET_ID: ${{ secrets.VAULT_APPROLE_SECRET_ID }}
