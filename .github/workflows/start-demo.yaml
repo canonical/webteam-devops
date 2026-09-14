@@ -1,0 +1,380 @@
+name: Deploy Demo
+
+on:
+  workflow_call:
+    inputs:
+      demo-id:
+        description: Optional explicit demo ID. Defaults to {repo-name}-pr{number} on pull_request events.
+        required: false
+        type: string
+        default: ""
+      post-pr-comment:
+        description: Post/update demo status comment on pull requests.
+        required: false
+        type: boolean
+        default: true
+      setup-runner:
+        description: Runner label for setup/comment jobs.
+        required: false
+        type: string
+        default: ubuntu-latest
+      build-runner:
+        description: Runner label for rock/charm build jobs.
+        required: false
+        type: string
+        default: ubuntu-latest
+      deploy-runs-on:
+        description: JSON array of runner labels for deploy job.
+        required: false
+        type: string
+        default: '["self-hosted","self-hosted-linux-amd64-noble-private-endpoint-medium"]'
+      juju-controller-address:
+        description: Juju controller address used by juju CLI and Terraform provider.
+        required: false
+        type: string
+        default: jaas.ps7.canonical.com:443/k8s-jaas-ps7-jimm-jimm
+      juju-controller-name:
+        description: Juju controller alias used for juju login.
+        required: false
+        type: string
+        default: jaas-ps7
+      juju-model-name:
+        description: Juju model in owner/name form used by Juju and Terraform (e.g. owner/model).
+        required: true
+        type: string
+      juju-model-uuid:
+        description: Juju model UUID used to import the demo app into Terraform state.
+        required: true
+        type: string
+      s3-bucket:
+        description: Terraform state S3 bucket name.
+        required: false
+        type: string
+        default: webteam-demos-ps7-tfstate
+      s3-region:
+        description: Terraform state S3 region value.
+        required: false
+        type: string
+        default: prodstack7
+      s3-endpoint:
+        description: Terraform state S3 endpoint URL.
+        required: false
+        type: string
+        default: https://radosgw.ps7.canonical.com
+      terraform-backend-key-prefix:
+        description: Prefix for Terraform state key path.
+        required: false
+        type: string
+        default: demos
+      terraform-dir:
+        description: Directory containing demo terraform files.
+        required: false
+        type: string
+        default: terraform/demo
+      charm-root:
+        description: Directory containing charm source.
+        required: false
+        type: string
+        default: charm
+      charm-image-resource-name:
+        description: Charm OCI image resource name to pass to juju deploy/refresh.
+        required: false
+        type: string
+        default: flask-app-image
+    secrets:
+      demos_juju_client_id:
+        required: true
+      demos_juju_client_secret:
+        required: true
+      demos_s3_access_key_id:
+        required: true
+      demos_s3_secret_access_key:
+        required: true
+
+permissions:
+  pull-requests: write
+  packages: write
+
+jobs:
+  setup:
+    name: Setup Demo
+    runs-on: ${{ inputs.setup-runner }}
+    outputs:
+      demo-id: ${{ steps.demo-id.outputs.id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get demo ID
+        id: demo-id
+        shell: bash
+        run: |
+          repo_name=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g')
+          if [ -n "${{ inputs.demo-id }}" ]; then
+            echo "id=${{ inputs.demo-id }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "id=${repo_name}-pr${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "id=${repo_name}-${{ github.run_id }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post pending comment
+        if: ${{ inputs.post-pr-comment && github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        env:
+          RUN_ID: ${{ github.run_id }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            })
+            const existingComment = comments.find(comment => {
+              return comment.user.type === 'Bot' && comment.body.includes('<!-- demo_service -->')
+            })
+
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${process.env.RUN_ID}`
+            const body = `<!-- demo_service -->\n### <img src='https://assets.ubuntu.com/v1/6baef514-ubuntu-circle-of-friends-large.svg' height=16 width=16> Demo\n⏳ Deployment in progress… [View workflow run](${runUrl})`
+
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body,
+              })
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body,
+              })
+            }
+
+  build-rock:
+    name: Build Rock
+    needs: setup
+    runs-on: ${{ inputs.build-runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup LXD
+        uses: canonical/setup-lxd@main
+
+      - name: Setup rockcraft
+        run: sudo snap install rockcraft --classic
+
+      - name: Cache rock
+        id: cache-rock
+        uses: actions/cache@v4
+        with:
+          path: "*.rock"
+          key: rock-${{ github.sha }}
+
+      - name: Pack rock
+        if: steps.cache-rock.outputs.cache-hit != 'true'
+        run: rockcraft pack
+
+      - name: Upload rock artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: rock-${{ needs.setup.outputs.demo-id }}
+          path: "*.rock"
+          retention-days: 1
+
+  build-charm:
+    name: Build Charm
+    needs: setup
+    runs-on: ${{ inputs.build-runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup LXD
+        uses: canonical/setup-lxd@main
+
+      - name: Setup charmcraft
+        run: sudo snap install charmcraft --classic --channel=latest/stable
+
+      - name: Cache charm
+        id: cache-charm
+        uses: actions/cache@v4
+        with:
+          path: "${{ inputs.charm-root }}/*.charm"
+          key: charm-${{ hashFiles(format('{0}/**', inputs.charm-root)) }}
+
+      - name: Pack charm
+        if: steps.cache-charm.outputs.cache-hit != 'true'
+        run: |
+          cd "${{ inputs.charm-root }}"
+          charmcraft pack -v
+
+      - name: Upload charm artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: charm-${{ needs.setup.outputs.demo-id }}
+          path: "${{ inputs.charm-root }}/*.charm"
+          retention-days: 1
+
+  deploy:
+    name: Deploy to Juju
+    needs: [setup, build-rock, build-charm]
+    runs-on: ${{ fromJSON(inputs.deploy-runs-on) }}
+    env:
+      JUJU_CLIENT_ID: ${{ secrets.demos_juju_client_id }}
+      JUJU_CLIENT_SECRET: ${{ secrets.demos_juju_client_secret }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.demos_s3_access_key_id }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.demos_s3_secret_access_key }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download rock
+        uses: actions/download-artifact@v6
+        with:
+          name: rock-${{ needs.setup.outputs.demo-id }}
+
+      - name: Download charm
+        uses: actions/download-artifact@v6
+        with:
+          name: charm-${{ needs.setup.outputs.demo-id }}
+
+      - name: Set image URL
+        id: image-url
+        shell: bash
+        run: |
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "url=ghcr.io/${REPO_LOWER}:${{ needs.setup.outputs.demo-id }}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Setup skopeo
+        run: sudo snap install rockcraft --classic
+
+      - name: Push rock to GHCR
+        shell: bash
+        run: |
+          ROCK_FILE=$(ls *.rock)
+          rockcraft.skopeo --insecure-policy copy oci-archive:$ROCK_FILE docker://${{ steps.image-url.outputs.url }} --dest-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Install Juju
+        run: sudo snap install juju
+
+      - name: Authenticate with JAAS
+        run: juju login "${{ inputs.juju-controller-address }}" -c "${{ inputs.juju-controller-name }}"
+
+      - name: Deploy charm
+        shell: bash
+        run: |
+          CHARM_FILE=$(ls *.charm)
+          MODEL="${{ inputs.juju-model-name }}"
+          RESOURCE_NAME="${{ inputs.charm-image-resource-name }}"
+          if juju show-application "${{ needs.setup.outputs.demo-id }}" -m "$MODEL" &>/dev/null; then
+            juju refresh --debug "${{ needs.setup.outputs.demo-id }}" \
+              --path="./$CHARM_FILE" \
+              --resource "$RESOURCE_NAME=${{ steps.image-url.outputs.url }}" \
+              -m "$MODEL"
+          else
+            juju deploy --debug "./$CHARM_FILE" "${{ needs.setup.outputs.demo-id }}" \
+              --resource "$RESOURCE_NAME=${{ steps.image-url.outputs.url }}" \
+              -m "$MODEL"
+          fi
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Write Terraform base config
+        shell: bash
+        run: |
+          cat > "${{ inputs.terraform-dir }}/_base.tf" << 'EOF'
+          terraform {
+            required_providers {
+              juju = {
+                source  = "juju/juju"
+                version = "~> 1.1.0"
+              }
+            }
+            backend "s3" {
+              bucket = "${{ inputs.s3-bucket }}"
+              region = "${{ inputs.s3-region }}"
+              endpoints = {
+                s3 = "${{ inputs.s3-endpoint }}"
+              }
+              skip_region_validation      = true
+              skip_credentials_validation = true
+              skip_requesting_account_id  = true
+              skip_s3_checksum            = true
+              use_path_style              = true
+              use_lockfile                = true
+            }
+          }
+
+          provider "juju" {
+            controller_addresses = "${{ inputs.juju-controller-address }}"
+          }
+
+          data "juju_model" "demos" {
+            owner = split("/", "${{ inputs.juju-model-name }}")[0]
+            name  = split("/", "${{ inputs.juju-model-name }}")[1]
+          }
+
+          variable "demo_id" {
+            description = "Unique identifier for this demo (e.g. my-repo-pr42)."
+            type        = string
+          }
+          EOF
+
+      - name: Terraform init
+        run: terraform -chdir=${{ inputs.terraform-dir }} init -backend-config="key=${{ inputs.terraform-backend-key-prefix }}/${{ needs.setup.outputs.demo-id }}/state"
+
+      - name: Import demo app into Terraform state
+        env:
+          DEMO_ID: ${{ needs.setup.outputs.demo-id }}
+          MODEL_UUID: ${{ inputs.juju-model-uuid }}
+        shell: bash
+        run: |
+          if ! terraform -chdir=${{ inputs.terraform-dir }} state show juju_application.demo >/dev/null 2>&1; then
+            terraform -chdir=${{ inputs.terraform-dir }} import -input=false -var="demo_id=${DEMO_ID}" juju_application.demo "${MODEL_UUID}:${DEMO_ID}"
+          fi
+
+      - name: Terraform apply
+        env:
+          TF_VAR_demo_id: ${{ needs.setup.outputs.demo-id }}
+        run: terraform -chdir=${{ inputs.terraform-dir }} apply -auto-approve
+
+      - name: Post demo comment
+        if: ${{ inputs.post-pr-comment && github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        env:
+          DEMO_ID: ${{ needs.setup.outputs.demo-id }}
+          STATUS: deployed
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            })
+            const existingComment = comments.find(comment => {
+              return comment.user.type === 'Bot' && comment.body.includes('<!-- demo_service -->')
+            })
+
+            const demoId = process.env.DEMO_ID
+            const body = `<!-- demo_service -->\n### [<img src='https://assets.ubuntu.com/v1/6baef514-ubuntu-circle-of-friends-large.svg' height=16 width=16> Demo](https://${demoId}.demos.canonical.com)\n✅ Demo deployed: https://${demoId}.demos.canonical.com`
+
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body,
+              })
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body,
+              })
+            }
