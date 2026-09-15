@@ -9,7 +9,7 @@ if ! vault token lookup 1>/dev/null 2>&1; then
     # true if the length of the string is non-zero
     if [ -n "$VAULT_ROLE_ID" ] && [ -n "$VAULT_SECRET_ID" ]; then
         echo "Authenticating to $VAULT_ADDR with AppRole"
-        vault write -f -field=token auth/approle/login role_id="$VAULT_ROLE_ID" secret_id="$VAULT_SECRET_ID" | vault login -
+        vault write -f -field=token auth/approle/login role_id="$VAULT_ROLE_ID" secret_id="$VAULT_SECRET_ID" | vault login -no-print -
     else
         echo "No valid token found, logging in to $VAULT_ADDR with OIDC"
         vault login -method=oidc
