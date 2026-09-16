@@ -9,7 +9,7 @@ on:
       terraform_github_repo:
         required: false
         type: string
-        default: "canonical/webteam-devops"
+        default: "canonical/webteam-terraform-plans"
     secrets:
       VAULT_APPROLE_ROLE_ID:
         required: true
@@ -26,7 +26,7 @@ jobs:
         run: |
           sudo snap install vault --classic
 
-      - name: Checkout webteam-devops
+      - name: Checkout Terraform config
         uses: actions/checkout@v7
         with:
           repository: ${{ inputs.terraform_github_repo }}

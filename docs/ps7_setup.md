@@ -22,14 +22,16 @@ To have a Terraform deployment to PS7 you'll first need a place where to store t
 configuration files. This folder is what IS will watch and will be the configuration
 your environment is synchronized to.
 
-You can follow `/docs/gitops.md` to set up one.
+For this purpose we have a private repository:
+[webteam-terraform-plans](https://github.com/canonical/webteam-terraform-plans)
+You can follow the README to set up your configuration folder.
 
-## Terraform configuration
+If it's your first time using Terraform check
+[terraform.md](https://github.com/canonical/webteam-terraform-plans/blob/main/terraform.md)
+to get a quick intro and useful resources to learn more (should you be interested in that).
 
-If it's your first time using Terraform check `/docs/terraform.md` to get a quick intro
-and useful resources to learn more (should you be interested in that).
-
-You can also copy an existing working example at `/terraform/ps7/k8s-stg-marketplace-rocks`
+You can also copy an existing working example from
+[terraform/ps7/k8s-stg-marketplace-rocks](https://github.com/canonical/webteam-terraform-plans/blob/main/terraform/ps7/k8s-stg-marketplace-rocks)
 and modify it to your needs.
 
 ## Workflows

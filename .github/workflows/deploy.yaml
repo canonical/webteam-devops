@@ -84,7 +84,7 @@ jobs:
       CHARMHUB_TOKEN: ${{ secrets.CHARMHUB_TOKEN }}
 
   deploy-ps6:
-    name: Deploy to PS6 Environment
+    name: Deploy with Juju CLI
     needs: [setup, pack-and-release]
     if: always() && !failure() && !cancelled() && inputs.deploy_method == 'juju'
     uses: ./.github/workflows/juju_deploy_ps6.yaml
@@ -102,7 +102,7 @@ jobs:
       VAULT_APPROLE_SECRET_ID: ${{ secrets.VAULT_APPROLE_SECRET_ID }}
 
   deploy-ps7:
-    name: Deploy to PS7 Environment
+    name: Deploy with Terraform
     needs: [pack-and-release]
     if: always() && !failure() && !cancelled() && inputs.deploy_method == 'terraform'
     uses: ./.github/workflows/terraform_apply.yaml

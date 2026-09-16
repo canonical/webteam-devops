@@ -1,4 +1,4 @@
-name: Deploy with Juju to PS6
+name: Deploy with Juju CLI
 
 on:
   workflow_call:
