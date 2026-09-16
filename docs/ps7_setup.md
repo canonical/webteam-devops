@@ -115,3 +115,55 @@ force a manual synchronization without having to wait).
 "juju_application". This means that when you want to do a release, you'll have to first
 trigger the build and then open a PR to change the revisions in your Terraform configuration
 to update them.
+
+## Customizations
+
+Teams can choose to use a separate repository, directory structure or service account.
+This repository is set to work out of the box with defaults only for the specified conventions,
+but also allows some custom requirements to be satisfied with the use of inputs and secrets.
+
+### Custom repository
+
+You can use any repository and directory structure within it for your Terraform configuration files.
+This can be controlled with 2 input variables:
+- `terraform_github_repo`: allows to specify the GitHub repository to use with the format "org/repo-name".
+For example, the default is *canonical/webteam-terraform-plans*.
+- `terraform_dir`: allows to specify the path to the config files inside the repository.
+
+This has an important caveat if you are using a private repository (which you should, to keep
+our infrastructure configuration secret and give less information to possible attackers).
+Private repositories can't not be accessed without proper authentication.
+
+#### Accessing private repositories
+
+For this purpose a Private SSH Key has been deployed to Vault in the `canonical-webdesign` IAM
+group. This key gives the workflow access to the default private repository used
+([webteam-terraform-plans](https://github.com/canonical/webteam-terraform-plans)). 
+
+The process to set everything up is the following:
+- Create a SSH key-pair: `ssh-keygen -t ed25519 -C "<key-name>" -f ./<key-file-name> -N ""`
+- Upload the private key as secret to the repository where you will call this workflow with the
+name *TERRAFORM_REPO_SSH_KEY*.
+- Set the public key as a "deploy key" at [webteam-terraform-plans](https://github.com/canonical/webteam-terraform-plans).
+To do this you'll have to go to *Settings > Deploy keys > Add deploy key* and add the full contents
+of the generated public key file.
+
+### Custom directory structure
+
+If you're not following the default directory structure specified in
+[webteam-terraform-plans](https://github.com/canonical/webteam-terraform-plans) then you need
+to specify which is the corresponding Vault service for your deployment.
+
+This is the same as the model name and you can see how to obtain it from the
+[GitOps docs](https://github.com/canonical/webteam-terraform-plans/blob/main/terraform.md).
+Once you have it you can pass it when calling the script with an input named `vault_model_name`.
+
+### Custom service account
+
+If you are not using the `canonical-webdesign` IAM group but a custom one for your team, the
+Vault credentials you'll add to your repository will be those of your own group. This means
+you won't have access to the secret stored in the general Web service account.
+
+Luckily there's an easy solution! Everyone in web is part of `canonical-webdesign` so you can
+go to [Vault](https://vault.ps7.admin.canonical.com/ui/vault/secrets/secret/kv/list/groups/canonical-webdesign/)
+and just copy the `webteam-terraform-plans` secret over to the IAM group in use.
