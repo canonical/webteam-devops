@@ -29,6 +29,10 @@ jobs:
       vault_model: ${{ steps.validate_vault.outputs.vault_model }}
       TERRAFORM_REPO_SSH_KEY: ${{ steps.validate_key.outputs.TERRAFORM_REPO_SSH_KEY }}
     steps:
+      - name: Install Dependencies
+        run: |
+          sudo snap install vault --classic
+
       - name: Validate vault_model_name
         id: validate_vault
         run: |
