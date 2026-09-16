@@ -45,6 +45,7 @@ jobs:
               exit 1
             else
               echo "vault_model=$VAULT_MODEL" >> $GITHUB_OUTPUT
+            fi
           fi
       
       - name: Validate ssh-key secret
@@ -65,6 +66,7 @@ jobs:
             echo "TERRAFORM_REPO_SSH_KEY=${{ secrets.TERRAFORM_REPO_SSH_KEY }}" >> $GITHUB_OUTPUT
           else
             echo "TERRAFORM_REPO_SSH_KEY=$(vault kv get -field=ssh-key secret/groups/canonical-webdesign-marketplace/webteam_terraform_plans)" >> $GITHUB_OUTPUT
+          fi
 
   deploy:
     name: Terraform Apply
