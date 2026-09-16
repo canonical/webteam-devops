@@ -69,7 +69,7 @@ jobs:
             # secret provided
             echo "TERRAFORM_REPO_SSH_KEY=${{ secrets.TERRAFORM_REPO_SSH_KEY }}" >> $GITHUB_OUTPUT
           else
-            echo "TERRAFORM_REPO_SSH_KEY=$(vault kv get -field=ssh-key secret/groups/canonical-webdesign-marketplace/webteam_terraform_plans)" >> $GITHUB_OUTPUT
+            echo "TERRAFORM_REPO_SSH_KEY=$(vault kv get -field=ssh-key secret/groups/canonical-webdesign/webteam_terraform_plans)" >> $GITHUB_OUTPUT
           fi
 
   deploy:
