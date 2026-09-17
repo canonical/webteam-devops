@@ -13,6 +13,14 @@ on:
       vault_model_name:
         required: false
         type: string
+      iam_group:
+        required: false
+        type: string
+        default: "canonical-webdesign"
+      environment:
+        required: false
+        default: ''
+        type: string
     secrets:
       VAULT_APPROLE_ROLE_ID:
         required: true
@@ -25,9 +33,9 @@ jobs:
   validate:
     name: Validation
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
     outputs:
       vault_model: ${{ steps.validate_vault.outputs.vault_model }}
-      TERRAFORM_REPO_SSH_KEY: ${{ steps.validate_key.outputs.TERRAFORM_REPO_SSH_KEY }}
     steps:
       - name: Install Dependencies
         run: |
@@ -57,6 +65,7 @@ jobs:
     if: always() && !failure() && !cancelled()
     runs-on: [self-hosted, self-hosted-linux-amd64-jammy-private-endpoint-medium]
     needs: [validate]
+    environment: ${{ inputs.environment }}
     steps:
       - name: Install Dependencies
         run: |
@@ -76,7 +85,7 @@ jobs:
             # secret provided
             echo "TERRAFORM_REPO_SSH_KEY=${{ secrets.TERRAFORM_REPO_SSH_KEY }}" >> $GITHUB_OUTPUT
           else
-            SSH_KEY="$(vault kv get -field=ssh-key secret/groups/canonical-webdesign-marketplace/webteam_terraform_plans)"
+            SSH_KEY="$(vault kv get -field=ssh-key secret/groups/${{ inputs.iam_group }}/webteam_terraform_plans)"
 
             # mask every line to make sure the key is not printed in the logs
             # IFS (Internal Field Separator) avoids any trimming, preserving the lines from the key
@@ -125,6 +134,5 @@ jobs:
 
       - name: Terraform init and apply
         run: |
-          #terraform -chdir=${{ inputs.terraform_dir }} init
-          #terraform -chdir=${{ inputs.terraform_dir }} apply -auto-approve
-          echo "Deploying..."
+          terraform -chdir=${{ inputs.terraform_dir }} init
+          terraform -chdir=${{ inputs.terraform_dir }} apply -auto-approve

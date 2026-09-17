@@ -166,4 +166,5 @@ you won't have access to the secret stored in the general Web service account.
 
 Luckily there's an easy solution! Everyone in web is part of `canonical-webdesign` so you can
 go to [Vault](https://vault.ps7.admin.canonical.com/ui/vault/secrets/secret/kv/list/groups/canonical-webdesign/)
-and just copy the `webteam-terraform-plans` secret over to the IAM group in use.
+and just copy the `webteam-terraform-plans` secret over to the IAM group in use. In addition,
+you need to pass to the script the input `iam_group` with the name of the IAM group to use.

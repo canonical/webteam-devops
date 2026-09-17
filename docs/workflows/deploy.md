@@ -33,6 +33,9 @@ In this case the additional inputs needed are:
 | Input | Type | Required | Description |
 |-------|------|----------|-------------|
 | `terraform_dir` | `string` | ✅ | The directory where the Terraform configuration to be deployed is. |
+| `terraform_github_repo` | `string` | ❌ | See `docs/workflows/terraform_apply.md` for information about this input. |
+| `vault_model_name` | `string` | ❌ | See `docs/workflows/terraform_apply.md` for information about this input. |
+| `iam_group` | `string` | ❌ | See `docs/workflows/terraform_apply.md` for information about this input. |
 
 ---
 
@@ -45,6 +48,7 @@ The following secrets must be defined in the calling workflow or repository (eit
 | `VAULT_APPROLE_ROLE_ID` | ✅ | Get this from your model `echo $VAULT_APPROLE_ROLE_ID` |
 | `VAULT_APPROLE_SECRET_ID` | ✅ | Get this from your model `echo $VAULT_APPROLE_SECRET_ID` |
 | `CHARMHUB_TOKEN` | ✅ | Auth token used by Charmcraft to interact with Charmhub. Use `charmcraft login` [docs](https://canonical-charmcraft.readthedocs-hosted.com/en/stable/reference/commands/login/) to get the token  |
+| `TERRAFORM_REPO_SSH_KEY` | ❌ | See `docs/workflows/terraform_apply.md` for information about this secret. |
 
 ---
 

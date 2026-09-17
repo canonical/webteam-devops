@@ -3,26 +3,46 @@ name: Deploy
 on:
   workflow_call:
     inputs:
+      # Used for pack_release workflow
       charm_name:
         required: true
         type: string
       channel:
         required: true
         type: string
+      force_charm_build:
+        required: false
+        default: false
+        type: boolean
+      # Used for juju_deploy_ps6 workflow
       juju_controller_name:
         required: false
         type: string
       juju_model_name:
         required: false
         type: string
+      # Used to select the deployment method (juju vs terraform)
       deploy_method:
         required: false
         default: 'juju'
         type: string
+      # Used for terraform_apply workflow (deploy_method = terraform)
       terraform_dir:
         required: false
         default: ''
         type: string
+      terraform_github_repo:
+        required: false
+        type: string
+        default: "canonical/webteam-terraform-plans"
+      vault_model_name:
+        required: false
+        type: string
+      iam_group:
+        required: false
+        type: string
+        default: "canonical-webdesign"
+      # Common variables for GH environment usage
       environment:
         required: false
         default: ''
@@ -31,17 +51,18 @@ on:
         required: false
         default: ''
         type: string
-      force_charm_build:
-        required: false
-        default: false
-        type: boolean
     secrets:
+      # Used for pack_release workflow
+      CHARMHUB_TOKEN:
+        required: true
+      # Used for juju_deploy_ps6 & terraform_apply workflows
       VAULT_APPROLE_ROLE_ID:
         required: true
       VAULT_APPROLE_SECRET_ID:
         required: true
-      CHARMHUB_TOKEN:
-        required: true
+      # Optionally used for terraform_apply workflow when using a custom repo for the terraform configuration
+      TERRAFORM_REPO_SSH_KEY:
+        required: false
 
 jobs:
   validate:
@@ -108,6 +129,11 @@ jobs:
     uses: ./.github/workflows/terraform_apply.yaml
     with:
       terraform_dir: ${{ inputs.terraform_dir }}
+      terraform_github_repo: ${{ inputs.terraform_github_repo }}
+      vault_model_name: ${{ inputs.vault_model_name }}
+      iam_group: ${{ inputs.iam_group }}
+      environment: ${{ inputs.environment }}
     secrets:
       VAULT_APPROLE_ROLE_ID: ${{ secrets.VAULT_APPROLE_ROLE_ID }}
       VAULT_APPROLE_SECRET_ID: ${{ secrets.VAULT_APPROLE_SECRET_ID }}
+      TERRAFORM_REPO_SSH_KEY: ${{ secrets.TERRAFORM_REPO_SSH_KEY }}
