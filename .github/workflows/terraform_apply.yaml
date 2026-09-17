@@ -51,9 +51,19 @@ jobs:
               echo "vault_model=$VAULT_MODEL" >> $GITHUB_OUTPUT
             fi
           fi
-      
-      - name: Validate ssh-key secret
-        id: validate_key
+
+  deploy:
+    name: Terraform Apply
+    if: always() && !failure() && !cancelled()
+    runs-on: [self-hosted, self-hosted-linux-amd64-jammy-private-endpoint-medium]
+    needs: [validate]
+    steps:
+      - name: Install Dependencies
+        run: |
+          sudo snap install vault --classic
+
+      - name: Get SSH key for Terraform repo
+        id: get_ssh_key
         env:
           VAULT_ROLE_ID: ${{ secrets.VAULT_APPROLE_ROLE_ID }}
           VAULT_SECRET_ID: ${{ secrets.VAULT_APPROLE_SECRET_ID }}
@@ -69,24 +79,29 @@ jobs:
             # secret provided
             echo "TERRAFORM_REPO_SSH_KEY=${{ secrets.TERRAFORM_REPO_SSH_KEY }}" >> $GITHUB_OUTPUT
           else
-            echo "TERRAFORM_REPO_SSH_KEY=$(vault kv get -field=ssh-key secret/groups/canonical-webdesign/webteam_terraform_plans)" >> $GITHUB_OUTPUT
-          fi
+            SSH_KEY="$(vault kv get -field=ssh-key secret/groups/canonical-webdesign/webteam_terraform_plans)"
 
-  deploy:
-    name: Terraform Apply
-    if: always() && !failure() && !cancelled()
-    runs-on: [self-hosted, self-hosted-linux-amd64-jammy-private-endpoint-medium]
-    needs: [validate]
-    steps:
-      - name: Install Dependencies
-        run: |
-          sudo snap install vault --classic
+            # mask every line to make sure the key is not printed in the logs
+            # IFS (Internal Field Separator) avoids any trimming, preserving the lines from the key
+            while IFS= read -r line; do
+              [ -n "$line" ] && echo "::add-mask::$line"
+            done <<< "$SSH_KEY"
+
+            # multiline output with heredoc
+            # https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-commands#multiline-strings
+            DELIM="EOF_SSH_KEY"
+            {
+              echo "TERRAFORM_REPO_SSH_KEY<<$DELIM"
+              echo "$SSH_KEY"
+              echo "$DELIM"
+            } >> $GITHUB_OUTPUT
+          fi
 
       - name: Checkout Terraform config
         uses: actions/checkout@v7
         with:
           repository: ${{ inputs.terraform_github_repo }}
-          ssh-key: ${{ needs.validate.outputs.TERRAFORM_REPO_SSH_KEY }}
+          ssh-key: ${{ steps.get_ssh_key.outputs.TERRAFORM_REPO_SSH_KEY }}
 
       - uses: hashicorp/setup-terraform@v4
         with:
