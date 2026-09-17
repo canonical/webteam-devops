@@ -6,37 +6,133 @@ on:
       terraform_dir:
         required: true
         type: string
+      terraform_github_repo:
+        required: false
+        type: string
+        default: "canonical/webteam-terraform-plans"
+      vault_model_name:
+        required: false
+        type: string
+      iam_group:
+        required: false
+        type: string
+        default: "canonical-webdesign"
+      environment:
+        required: false
+        default: ''
+        type: string
     secrets:
       VAULT_APPROLE_ROLE_ID:
         required: true
       VAULT_APPROLE_SECRET_ID:
         required: true
+      TERRAFORM_REPO_SSH_KEY:
+        required: false
 
 jobs:
-  deploy:
-    name: Terraform Apply
-    if: always() && !failure() && !cancelled()
-    runs-on: [self-hosted, self-hosted-linux-amd64-jammy-private-endpoint-medium]
+  validate:
+    name: Validation
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    outputs:
+      vault_model: ${{ steps.validate_vault.outputs.vault_model }}
     steps:
       - name: Install Dependencies
         run: |
           sudo snap install vault --classic
 
-      - name: Checkout webteam-devops
+      - name: Validate vault_model_name
+        id: validate_vault
+        run: |
+          if [ -n "${{ inputs.vault_model_name }}" ]; then
+            # input provided
+            echo "vault_model=${{ inputs.vault_model_name }}" >> $GITHUB_OUTPUT
+          else
+            # get last part of the path, which contains the model name if the default folder
+            # structure of webteam-terraform-plans is followed
+            VAULT_MODEL=$(basename ${{ inputs.terraform_dir }})
+
+            if [ ! -n "$VAULT_MODEL" ]; then
+              echo "Could not infer vault model name. Please provide it as input."
+              exit 1
+            else
+              echo "vault_model=$VAULT_MODEL" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+  deploy:
+    name: Terraform Apply
+    if: always() && !failure() && !cancelled()
+    runs-on: [self-hosted, self-hosted-linux-amd64-jammy-private-endpoint-medium]
+    needs: [validate]
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Install Dependencies
+        run: |
+          sudo snap install vault --classic
+
+      - name: Get SSH key for Terraform repo
+        id: get_ssh_key
+        env:
+          VAULT_ROLE_ID: ${{ secrets.VAULT_APPROLE_ROLE_ID }}
+          VAULT_SECRET_ID: ${{ secrets.VAULT_APPROLE_SECRET_ID }}
+          VAULT_ADDR: https://vault.ps7.admin.canonical.com
+        run: |
+          # Authenticate to Vault
+          vault write -f -field=token auth/approle/login role_id="$VAULT_ROLE_ID" secret_id="$VAULT_SECRET_ID" | vault login -no-print -
+
+          if [ -n "${{ secrets.TERRAFORM_REPO_SSH_KEY }}" ]; then
+            # secret provided
+            echo "TERRAFORM_REPO_SSH_KEY=${{ secrets.TERRAFORM_REPO_SSH_KEY }}" >> $GITHUB_OUTPUT
+          else
+            SSH_KEY="$(vault kv get -field=ssh-key secret/groups/${{ inputs.iam_group }}/webteam_terraform_plans)"
+
+            # mask every line to make sure the key is not printed in the logs
+            # IFS (Internal Field Separator) avoids any trimming, preserving the lines from the key
+            while IFS= read -r line; do
+              [ -n "$line" ] && echo "::add-mask::$line"
+            done <<< "$SSH_KEY"
+
+            # multiline output with heredoc
+            # https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-commands#multiline-strings
+            DELIM="EOF_SSH_KEY"
+            {
+              echo "TERRAFORM_REPO_SSH_KEY<<$DELIM"
+              echo "$SSH_KEY"
+              echo "$DELIM"
+            } >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout Terraform config
         uses: actions/checkout@v7
         with:
-          repository: canonical/webteam-devops
+          repository: ${{ inputs.terraform_github_repo }}
+          ssh-key: ${{ steps.get_ssh_key.outputs.TERRAFORM_REPO_SSH_KEY }}
 
       - uses: hashicorp/setup-terraform@v4
         with:
           terraform_wrapper: false
-
-      - name: Terraform init and apply
+      
+      - name: Get S3 backend creds
         env:
           VAULT_ROLE_ID: ${{ secrets.VAULT_APPROLE_ROLE_ID }}
           VAULT_SECRET_ID: ${{ secrets.VAULT_APPROLE_SECRET_ID }}
+          VAULT_ADDR: https://vault.ps7.admin.canonical.com
+          VAULT_MODEL: ${{ needs.validate.outputs.vault_model }}
         run: |
-          # authenticate to vault
-          source ./${{ inputs.terraform_dir }}/s3_credentials_jaas.sh
+          # Authenticate to Vault
+          vault write -f -field=token auth/approle/login role_id="$VAULT_ROLE_ID" secret_id="$VAULT_SECRET_ID" | vault login -no-print -
+
+          # retrieve the S3 creds through Vault
+          AWS_ACCESS_KEY_ID=$(vault kv get -field=access_key secret/services/"$VAULT_MODEL"/s3)
+          AWS_SECRET_ACCESS_KEY=$(vault kv get -field=secret_key secret/services/"$VAULT_MODEL"/s3)
+          echo "::add-mask::$AWS_ACCESS_KEY_ID"
+          echo "::add-mask::$AWS_SECRET_ACCESS_KEY"
+          echo "AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID" >> $GITHUB_ENV
+          echo "AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY" >> $GITHUB_ENV
+          echo "Backend credentials set for $VAULT_MODEL in cloud ps7"
+
+      - name: Terraform init and apply
+        run: |
           terraform -chdir=${{ inputs.terraform_dir }} init
           terraform -chdir=${{ inputs.terraform_dir }} apply -auto-approve
