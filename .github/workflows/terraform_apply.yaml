@@ -69,17 +69,14 @@ jobs:
           VAULT_SECRET_ID: ${{ secrets.VAULT_APPROLE_SECRET_ID }}
           VAULT_ADDR: https://vault.ps7.admin.canonical.com
         run: |
-          # if the token is already present then skip Vault auth
-          if ! vault token lookup 1>/dev/null 2>&1; then
-            echo "Authenticating to $VAULT_ADDR with AppRole"
-            vault write -f -field=token auth/approle/login role_id="$VAULT_ROLE_ID" secret_id="$VAULT_SECRET_ID" | vault login -no-print -
-          fi
+          # Authenticate to Vault
+          vault write -f -field=token auth/approle/login role_id="$VAULT_ROLE_ID" secret_id="$VAULT_SECRET_ID" | vault login -no-print -
 
           if [ -n "${{ secrets.TERRAFORM_REPO_SSH_KEY }}" ]; then
             # secret provided
             echo "TERRAFORM_REPO_SSH_KEY=${{ secrets.TERRAFORM_REPO_SSH_KEY }}" >> $GITHUB_OUTPUT
           else
-            SSH_KEY="$(vault kv get -field=ssh-key secret/groups/canonical-webdesign/webteam_terraform_plans)"
+            SSH_KEY="$(vault kv get -field=ssh-key secret/groups/canonical-webdesign-marketplace/webteam_terraform_plans)"
 
             # mask every line to make sure the key is not printed in the logs
             # IFS (Internal Field Separator) avoids any trimming, preserving the lines from the key
@@ -114,15 +111,14 @@ jobs:
           VAULT_ADDR: https://vault.ps7.admin.canonical.com
           VAULT_MODEL: ${{ needs.validate.outputs.vault_model }}
         run: |
-          # if the token is already present then skip Vault auth
-          if ! vault token lookup 1>/dev/null 2>&1; then
-            echo "Authenticating to $VAULT_ADDR with AppRole"
-            vault write -f -field=token auth/approle/login role_id="$VAULT_ROLE_ID" secret_id="$VAULT_SECRET_ID" | vault login -no-print -
-          fi
+          # Authenticate to Vault
+          vault write -f -field=token auth/approle/login role_id="$VAULT_ROLE_ID" secret_id="$VAULT_SECRET_ID" | vault login -no-print -
 
           # retrieve the S3 creds through Vault
-          AWS_ACCESS_KEY_ID=$(vault kv get -field=access_key secret/services/"$VAULT_MODEL"/s3) || return 0
-          AWS_SECRET_ACCESS_KEY=$(vault kv get -field=secret_key secret/services/"$VAULT_MODEL"/s3) || return 0
+          AWS_ACCESS_KEY_ID=$(vault kv get -field=access_key secret/services/"$VAULT_MODEL"/s3)
+          AWS_SECRET_ACCESS_KEY=$(vault kv get -field=secret_key secret/services/"$VAULT_MODEL"/s3)
+          echo "::add-mask::$AWS_ACCESS_KEY_ID"
+          echo "::add-mask::$AWS_SECRET_ACCESS_KEY"
           echo "AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID" >> $GITHUB_ENV
           echo "AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY" >> $GITHUB_ENV
           echo "Backend credentials set for $VAULT_MODEL in cloud ps7"
