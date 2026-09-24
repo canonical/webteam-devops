@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 #
-# Terraform external data source: report the self-signed CA certificate.
+# Terraform external data source: create default namespace in Temporal server..
 #
-# Input (stdin, JSON):  {"model": "<juju-model>", "app": "<juju-app>"}
-# Output (stdout, JSON): {"ca": "<pem>"}  (empty string if not yet available)
+# Input (stdin, JSON): {"model": "<juju-model>", "app": "<juju-app>"}
+# Output (stdout, JSON): {}
 #
 # The juju/juju Terraform provider can run actions, but they do not wait for the
 # application and relations to be ready and the `apply` may fail, so we invoke the
-# `get-ca-certificate` action on the self-signed-certificates leader via the
-# juju CLI. Kept non-fatal and always valid JSON so `terraform plan` never
-# breaks while the app is still settling.
+# action via the juju CLI with polling.
+# Kept non-fatal and always valid JSON so `terraform plan` never breaks while the
+# app is still settling.
 #
 # On the first `terraform apply`, the juju_application resources return as soon
 # as the apps are *created*, not once their units are active/idle. The action is
-# therefore not yet available and would return empty, leaving the CA blank until
-# a second apply. To make the first apply succeed we poll the action until it
-# returns a certificate or a bounded deadline elapses.
+# therefore not yet available and could fail, requiring a second apply.
+# To make the first apply succeed we poll the action until it succeds or a
+# bounded deadline elapses.
 
 
 import json
@@ -23,18 +23,21 @@ import shutil
 import subprocess
 import sys
 import time
+import typing
 
 
 WAIT_SECONDS = 240
 POLL_INTERVAL = 15
 ACTION_TIMEOUT = 60
 
+NAMESPACE_ALREADY_EXISTS = "Namespace already exists"
 
-def emit(ca=""):
+
+def emit():
     """
-    Print the external data source contract and exit successfully.
+    Exit successfully.
     """
-    print(json.dumps({"ca": ca}))
+    print(json.dumps({}))
     sys.exit(0)
 
 
@@ -57,31 +60,46 @@ def run(cmd, timeout):
     return result.stdout.decode("utf-8", "replace")
 
 
-def fetch_ca(model, app):
+def create_temporal_namespace(model, app) -> bool:
     """
-    Run the action once; return the CA PEM or "" if not yet available.
-    `juju run <app>/leader get-ca-certificate` — the action returns the PEM
-    under results.ca-certificate. --format=json keys output by unit name.
+    Run the action once:
+    `juju run temporal-admin-k8s/leader cli ...`
+
+    Returns a boolean indicating if the action succeeded or not.
     """
     out = run(
-        ["juju", "run", f"{app}/leader", "get-ca-certificate",
+        ["juju", "run", f"{app}/leader", "cli",
+         "args=\"operator namespace create --namespace default --retention 1d\"",
          "-m", model, "--format=json"],
         timeout=ACTION_TIMEOUT,
     )
     if not out:
-        return ""
+        return False
 
     try:
         data = json.loads(out)
     except Exception:
-        return ""
+        return False
 
-    # Output shape: {"<unit>": {"results": {"ca-certificate": "<pem>"}, ...}}
+    # Output successful shape: {
+    #     "<unit>": {
+    #         "results": { "output": <out>, "result": "command succeeded" },
+    #         "status": "completed" | "failed"
+    #     },
+    #     ...
+    # }
+    # A failed action gives back no results.output or results.result, but contains
+    # a "message" key with the error.
     for unit in data.values():
-        ca = unit.get("results", {}).get("ca-certificate", "")
-        if ca:
-            return ca
-    return ""
+        output = unit.get("results", {}).get("output", None)
+        if output:
+            return True
+        # if the error was that the namespace already exists that's fine
+        message = typing.cast(str, unit.get("message"))
+        if NAMESPACE_ALREADY_EXISTS in message:
+            return True
+
+    return False
 
 
 def main():
@@ -104,10 +122,8 @@ def main():
     attempt = 0
     while True:
         attempt += 1
-        ca = fetch_ca(model, app)
-        if ca:
-            emit(ca)
-        if time.monotonic() + POLL_INTERVAL >= deadline:
+        namespace_created = create_temporal_namespace(model, app)
+        if namespace_created or time.monotonic() + POLL_INTERVAL >= deadline:
             emit()
         time.sleep(POLL_INTERVAL)
 

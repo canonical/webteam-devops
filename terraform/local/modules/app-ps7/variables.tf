@@ -15,3 +15,8 @@ variable "hostname" {
   type        = string
   default     = "app.local"
 }
+
+variable "haproxy_route_offer_url" {
+  description = "The haproxy:haproxy-route offer to consume"
+  type        = string
+}

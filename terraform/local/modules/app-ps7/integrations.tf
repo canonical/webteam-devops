@@ -7,6 +7,6 @@ resource "juju_integration" "ingress_haproxy" {
   }
 
   application {
-    offer_url = module.ingress_ps7.haproxy_route_offer_url
+    offer_url = var.haproxy_route_offer_url
   }
 }

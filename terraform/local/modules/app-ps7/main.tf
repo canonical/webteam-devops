@@ -2,17 +2,13 @@ terraform {
   required_providers {
     juju = {
       source  = "juju/juju"
-      version = "~> 1.1.0"
+      version = "~> 2.3"
     }
   }
 }
 
 module "clouds" {
   source = "../clouds"
-}
-
-module "ingress_ps7" {
-  source = "../ingress-ps7"
 }
 
 resource "juju_model" "app" {

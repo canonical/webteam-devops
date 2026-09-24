@@ -30,8 +30,9 @@ data "external" "haproxy" {
 }
 
 # Retrieve the self-signed CA certificate. The juju/juju Terraform provider
-# cannot run actions, so we invoke `get-ca-certificate` on the leader unit via
-# the juju CLI. The script always returns valid JSON (empty ca when the action
+# cannot wait to run actions until the apps and relations have settled,
+# so we invoke `get-ca-certificate` on the leader unit via the juju CLI.
+# The script always returns valid JSON (empty ca when the action
 # is not yet available) so plans never fail while the app is settling.
 data "external" "ca_cert" {
   program = ["python3", "${path.module}/scripts/ca_cert.py"]
