@@ -47,8 +47,7 @@ resource "juju_application" "db" {
 
   charm {
     name      = "postgresql-k8s"
-    channel   = "16/stable"
-    base      = "ubuntu@24.04"
+    channel   = "14/stable"
   }
 
   trust = true

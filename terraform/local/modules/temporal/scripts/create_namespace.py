@@ -26,7 +26,7 @@ import time
 import typing
 
 
-WAIT_SECONDS = 240
+WAIT_SECONDS = 600
 POLL_INTERVAL = 15
 ACTION_TIMEOUT = 60
 
