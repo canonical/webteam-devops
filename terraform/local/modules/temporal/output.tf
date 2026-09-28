@@ -17,3 +17,8 @@ output "ingress_hostname" {
   description = "Hostname the ingress-configurator advertises for Temporal UI."
   value       = var.hostname
 }
+
+output "temporal_server_offer" {
+  description = "The temporal:temporal-host-info offer to consume to connect to the server"
+  value       = juju_offer.temporal_server.url
+}

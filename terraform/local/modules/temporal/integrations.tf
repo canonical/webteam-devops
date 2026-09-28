@@ -7,8 +7,7 @@ resource "juju_integration" "server_db" {
   }
 
   application {
-    name      = juju_application.db.name
-    endpoint  = "database"
+    offer_url = var.db_interface_offer_url
   }
 }
 
@@ -21,8 +20,7 @@ resource "juju_integration" "server_db_visibility" {
   }
 
   application {
-    name      = juju_application.db.name
-    endpoint  = "database"
+    offer_url = var.db_interface_offer_url
   }
 }
 
@@ -31,12 +29,12 @@ resource "juju_integration" "server_admin" {
 
   application {
     name      = juju_application.server.name
-    endpoint  = "admin"
+    endpoint  = var.temporal_admin_interface
   }
 
   application {
     name      = juju_application.admin.name
-    endpoint  = "admin"
+    endpoint  = var.temporal_admin_interface
   }
 }
 
@@ -45,12 +43,12 @@ resource "juju_integration" "server_admin_host" {
 
   application {
     name      = juju_application.server.name
-    endpoint  = "temporal-host-info"
+    endpoint  = var.temporal_host_info_interface
   }
 
   application {
     name      = juju_application.admin.name
-    endpoint  = "temporal-host-info"
+    endpoint  = var.temporal_host_info_interface
   }
 }
 
@@ -59,12 +57,12 @@ resource "juju_integration" "server_web_ui" {
 
   application {
     name      = juju_application.server.name
-    endpoint  = "ui"
+    endpoint  = var.temporal_ui_interface
   }
 
   application {
     name      = juju_application.web_ui.name
-    endpoint  = "ui"
+    endpoint  = var.temporal_ui_interface
   }
 }
 
@@ -73,11 +71,17 @@ resource "juju_integration" "server_web_ui_host" {
 
   application {
     name      = juju_application.server.name
-    endpoint  = "temporal-host-info"
+    endpoint  = var.temporal_host_info_interface
   }
 
   application {
     name      = juju_application.web_ui.name
-    endpoint  = "temporal-host-info"
+    endpoint  = var.temporal_host_info_interface
   }
+}
+
+resource "juju_offer" "temporal_server" {
+  model_uuid       = juju_model.temporal.uuid
+  application_name = juju_application.server.name
+  endpoints        = [var.temporal_host_info_interface]
 }

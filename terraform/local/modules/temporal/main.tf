@@ -41,16 +41,15 @@ resource "juju_application" "server" {
   }
 }
 
-resource "juju_application" "db" {
+resource "juju_application" "web_ui" {
   model_uuid  = juju_model.temporal.uuid
-  units       = var.units["db"]
+  units       = var.units["web-ui"]
 
   charm {
-    name      = "postgresql-k8s"
-    channel   = "14/stable"
+    name      = "temporal-ui-k8s"
+    channel   = "1.23/stable"
+    base      = "ubuntu@24.04"
   }
-
-  trust = true
 }
 
 resource "juju_application" "admin" {
@@ -73,16 +72,5 @@ data "external" "create_namespace" {
   query = {
     model = juju_model.temporal.name
     app   = juju_application.admin.name
-  }
-}
-
-resource "juju_application" "web_ui" {
-  model_uuid  = juju_model.temporal.uuid
-  units       = var.units["web-ui"]
-
-  charm {
-    name      = "temporal-ui-k8s"
-    channel   = "1.23/stable"
-    base      = "ubuntu@24.04"
   }
 }
