@@ -127,14 +127,17 @@ jobs:
 
       - name: Set image URL
         id: set_image_url
-        run: echo "image_url=ghcr.io/${GITHUB_REPOSITORY}:$(date +%s)-${GITHUB_SHA:0:7}" >> $GITHUB_OUTPUT
+        run: echo "image_url=ghcr.io/${GITHUB_REPOSITORY,,}:$(date +%s)-${GITHUB_SHA:0:7}" >> $GITHUB_OUTPUT
 
       - name: Push to GHCR
-        run: skopeo --insecure-policy copy oci-archive:$(ls *.rock) docker://${{ steps.set_image_url.outputs.image_url }} --dest-creds "canonical:${{ secrets.GITHUB_TOKEN }}"
+        run: skopeo --insecure-policy copy oci-archive:$(ls *.rock) docker://${{ steps.set_image_url.outputs.image_url }} --dest-creds "${GITHUB_ACTOR}:${{ secrets.GITHUB_TOKEN }}"
 
       - name: Pull image and get ID
         id: pull_image
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          echo "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
           docker pull ${{ steps.set_image_url.outputs.image_url }}
           IMAGE_ID=$(docker images --format "{{.ID}}" ${{ steps.set_image_url.outputs.image_url }})
           echo "image_id=$IMAGE_ID" >> $GITHUB_OUTPUT
