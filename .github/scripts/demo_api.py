@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import json
 import os
+import ssl
 import sys
 import time
 import urllib.error
@@ -39,6 +40,8 @@ def request(
     path: str,
     repository: str,
     key: str,
+    connect_url: str | None = None,
+    insecure: bool = False,
     body: dict[str, Any] | None = None,
     nonce: str | None = None,
 ) -> dict[str, Any]:
@@ -68,14 +71,22 @@ def request(
         "X-Demos-Signature": f"sha256={signature}",
         "X-Demos-Timestamp": timestamp,
     }
+    request_url = urllib.parse.urlunsplit(target)
+    if connect_url:
+        connect_target = urllib.parse.urlsplit(
+            f"{connect_url.rstrip('/')}{request_target}"
+        )
+        request_url = urllib.parse.urlunsplit(connect_target)
+        headers["Host"] = target.netloc
     api_request = urllib.request.Request(
-        urllib.parse.urlunsplit(target),
+        request_url,
         data=raw_body if body is not None else None,
         headers=headers,
         method=method.upper(),
     )
     try:
-        with urllib.request.urlopen(api_request, timeout=30) as response:
+        context = ssl._create_unverified_context() if insecure else None
+        with urllib.request.urlopen(api_request, timeout=30, context=context) as response:
             response_body = response.read()
     except urllib.error.HTTPError as error:
         response_body = error.read().decode(errors="replace")[:2000]
@@ -84,16 +95,22 @@ def request(
             error.code,
         ) from error
     except urllib.error.URLError as error:
-        raise ApiError(f"{method.upper()} {request_target} failed: {error.reason}") from error
+        raise ApiError(
+            f"{method.upper()} {request_target} failed: {error.reason}"
+        ) from error
 
     if not response_body:
         return {}
     try:
         result = json.loads(response_body)
     except json.JSONDecodeError as error:
-        raise ApiError(f"{method.upper()} {request_target} returned invalid JSON") from error
+        raise ApiError(
+            f"{method.upper()} {request_target} returned invalid JSON"
+        ) from error
     if not isinstance(result, dict):
-        raise ApiError(f"{method.upper()} {request_target} returned a non-object JSON response")
+        raise ApiError(
+            f"{method.upper()} {request_target} returned a non-object JSON response"
+        )
     return result
 
 
@@ -131,7 +148,15 @@ def poll(
     last: dict[str, Any] = {}
     while time.monotonic() < deadline:
         try:
-            last = request(args.api_url, "GET", path, args.repository, args.key)
+            last = request(
+                args.api_url,
+                "GET",
+                path,
+                args.repository,
+                args.key,
+                connect_url=args.connect_url,
+                insecure=args.insecure,
+            )
         except ApiError as error:
             if desired_absence and error.status == 404:
                 return {
@@ -145,7 +170,9 @@ def poll(
                 find_value(last, {"error", "message", "detail"})
                 or f"Controller reported terminal state {state}"
             )
-        if state in TERMINAL_SUCCESS and (not desired_absence or state in {"deleted", "destroyed"}):
+        if state in TERMINAL_SUCCESS and (
+            not desired_absence or state in {"deleted", "destroyed"}
+        ):
             return last
         time.sleep(args.interval)
     raise ApiError(
@@ -181,6 +208,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--api-url", required=True)
     parser.add_argument("--repository", required=True)
+    parser.add_argument("--connect-url")
+    parser.add_argument("--insecure", action="store_true")
     parser.add_argument("--pr-number", required=True, type=int)
     parser.add_argument("--key-env", default="DEMOS_HMAC_KEY")
     parser.add_argument("--output", type=Path, default=Path(".demo-result.json"))
@@ -224,7 +253,9 @@ def main() -> int:
                 "/api/v1/deploy",
                 args.repository,
                 key,
-                body,
+                connect_url=args.connect_url,
+                insecure=args.insecure,
+                body=body,
                 nonce=args.delivery_id,
             )
             result = poll(args)
@@ -240,7 +271,9 @@ def main() -> int:
                 "/api/v1/destroy",
                 args.repository,
                 key,
-                body,
+                connect_url=args.connect_url,
+                insecure=args.insecure,
+                body=body,
                 nonce=args.delivery_id,
             )
             result = poll(args, desired_absence=True)

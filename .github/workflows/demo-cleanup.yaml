@@ -11,6 +11,16 @@ on:
         description: Base URL of the demos controller API
         required: true
         type: string
+      api-connect-url:
+        description: Optional network endpoint used while preserving the API URL Host header
+        required: false
+        default: ""
+        type: string
+      api-insecure:
+        description: Disable TLS certificate verification for the connection endpoint
+        required: false
+        default: false
+        type: boolean
       timeout-seconds:
         description: Maximum time to wait for demo deletion
         required: false
@@ -63,14 +73,24 @@ jobs:
         continue-on-error: true
         shell: bash
         env:
+          API_CONNECT_URL: ${{ inputs.api-connect-url }}
+          API_INSECURE: ${{ inputs.api-insecure }}
           API_URL: ${{ inputs.api-url }}
           DEMOS_HMAC_KEY: ${{ secrets['demos-hmac-key'] }}
           POLL_INTERVAL: ${{ inputs.poll-interval-seconds }}
           PR_NUMBER: ${{ inputs.pr-number }}
           TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
         run: |
+          connection_args=()
+          if [ -n "$API_CONNECT_URL" ]; then
+            connection_args+=(--connect-url "$API_CONNECT_URL")
+          fi
+          if [ "$API_INSECURE" = "true" ]; then
+            connection_args+=(--insecure)
+          fi
           python3 _demo_workflow/.github/scripts/demo_api.py \
             --api-url "$API_URL" \
+            "${connection_args[@]}" \
             --repository "$GITHUB_REPOSITORY" \
             --pr-number "$PR_NUMBER" \
             --timeout "$TIMEOUT_SECONDS" \

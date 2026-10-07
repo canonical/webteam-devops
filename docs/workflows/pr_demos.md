@@ -40,6 +40,8 @@ jobs:
       pr-number: ${{ github.event.pull_request.number }}
       commit-sha: ${{ github.event.pull_request.head.sha }}
       api-url: ${{ vars.DEMOS_API_URL }}
+      api-connect-url: ${{ vars.DEMOS_API_CONNECT_URL }}
+      api-insecure: true
     secrets:
       demos-hmac-key: ${{ secrets.DEMOS_HMAC_KEY }}
 
@@ -49,6 +51,8 @@ jobs:
     with:
       pr-number: ${{ github.event.pull_request.number }}
       api-url: ${{ vars.DEMOS_API_URL }}
+      api-connect-url: ${{ vars.DEMOS_API_CONNECT_URL }}
+      api-insecure: true
     secrets:
       demos-hmac-key: ${{ secrets.DEMOS_HMAC_KEY }}
 ```
@@ -58,3 +62,8 @@ the repository secret to untrusted branches.
 
 The workflows and client contain no controller credentials. HMAC keys remain
 in the caller repository's Actions secrets.
+
+`api-connect-url` is useful where the public API hostname has no DNS record.
+Requests connect to that endpoint while retaining the signed API hostname in
+the HTTP `Host` header. Use `api-insecure` only for a trusted connection
+endpoint whose certificate cannot validate against the API hostname.
