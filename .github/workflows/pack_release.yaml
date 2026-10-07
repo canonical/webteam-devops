@@ -99,11 +99,6 @@ jobs:
       - name: Setup charmcraft
         run: sudo snap install charmcraft --classic --channel=latest/stable
 
-      - name: Fetch libs
-        run: |
-          cd ./charm
-          charmcraft fetch-libs
-
       - name: Pack charm
         run: charmcraft pack -v --project-dir ./charm
 
