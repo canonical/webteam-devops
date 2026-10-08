@@ -1,0 +1,150 @@
+name: Reusable demo cleanup
+
+on:
+  workflow_call:
+    inputs:
+      pr-number:
+        description: Closed pull request number
+        required: true
+        type: number
+      api-url:
+        description: Base URL of the demos controller API
+        required: true
+        type: string
+      api-connect-url:
+        description: Optional network endpoint used while preserving the API URL Host header
+        required: false
+        default: ""
+        type: string
+      api-insecure:
+        description: Disable TLS certificate verification for the connection endpoint
+        required: false
+        default: false
+        type: boolean
+      timeout-seconds:
+        description: Maximum time to wait for demo deletion
+        required: false
+        default: 300
+        type: number
+      poll-interval-seconds:
+        description: Delay between controller status requests
+        required: false
+        default: 5
+        type: number
+      delete-image:
+        description: Attempt to delete the single-tag PR package version
+        required: false
+        default: true
+        type: boolean
+    secrets:
+      demos-hmac-key:
+        description: Repository-specific HMAC key for the demos controller
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+  pull-requests: write
+
+concurrency:
+  group: demo-deploy-${{ github.repository }}-${{ inputs.pr-number }}
+  cancel-in-progress: true
+
+jobs:
+  destroy:
+    name: Destroy demo
+    permissions:
+      pull-requests: write
+    uses: ./.github/workflows/demo-api.yaml
+    with:
+      operation: destroy
+      pr-number: ${{ inputs.pr-number }}
+      api-url: ${{ inputs.api-url }}
+      api-connect-url: ${{ inputs.api-connect-url }}
+      api-insecure: ${{ inputs.api-insecure }}
+      timeout-seconds: ${{ inputs.timeout-seconds }}
+      poll-interval-seconds: ${{ inputs.poll-interval-seconds }}
+    secrets:
+      demos-hmac-key: ${{ secrets['demos-hmac-key'] }}
+
+  cleanup:
+    name: Clean image
+    needs: destroy
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Delete single-tag GHCR package version
+        if: ${{ inputs.delete-image }}
+        id: delete-image
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr-number }}
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          package="${GITHUB_REPOSITORY#*/}"
+          encoded_package="$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$package")"
+          owner_type="$(gh api "/users/${owner}" --jq .type)"
+          if [ "$owner_type" = "Organization" ]; then
+            endpoint="/orgs/${owner}/packages/container/${encoded_package}/versions"
+          else
+            endpoint="/users/${owner}/packages/container/${encoded_package}/versions"
+          fi
+          prefix="pr-${PR_NUMBER}-sha-"
+          versions="$(
+            gh api --paginate "${endpoint}?per_page=100" --jq \
+              ".[] | select(.metadata.container.tags | length == 1) |
+              select(.metadata.container.tags[0] | startswith(\"${prefix}\")) | .id"
+          )"
+          if [ -z "$versions" ]; then
+            echo "::notice::No safely deletable single-tag GHCR versions found for ${prefix}*"
+            exit 0
+          fi
+          while read -r version; do
+            test -n "$version" && gh api --method DELETE "${endpoint}/${version}"
+          done <<< "$versions"
+
+      - name: Update persistent PR comment
+        if: ${{ always() }}
+        uses: actions/github-script@v7
+        env:
+          API_MESSAGE: ${{ needs.destroy.outputs.message }}
+          API_STATE: ${{ needs.destroy.outputs.state }}
+          DESTROY_OUTCOME: ${{ needs.destroy.result }}
+          IMAGE_OUTCOME: ${{ steps.delete-image.outcome }}
+          MARKER: <!-- demos-controller:${{ github.repository }}:${{ inputs.pr-number }} -->
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const marker = process.env.MARKER;
+            const destroyed = process.env.DESTROY_OUTCOME === "success";
+            const state = process.env.API_STATE || (destroyed ? "destroyed" : "cleanup failed");
+            const details = process.env.API_MESSAGE ||
+              (destroyed ? "The controller reports that demo resources were removed." :
+                "The controller did not confirm demo cleanup.");
+            const image = process.env.IMAGE_OUTCOME === "failure"
+              ? "\n\nGHCR cleanup was not permitted or the package version could not be removed."
+              : "";
+            const body = `${marker}\n## PR demo: ${state}\n\n${details}${image}` +
+              `\n\n[Workflow run](${context.serverUrl}/${context.repo.owner}/` +
+              `${context.repo.repo}/actions/runs/${context.runId})`;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              ...context.repo,
+              issue_number: Number("${{ inputs.pr-number }}"),
+              per_page: 100,
+            });
+            const existing = comments.find(comment => comment.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                ...context.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: Number("${{ inputs.pr-number }}"),
+                body,
+              });
+            }

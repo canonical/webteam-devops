@@ -1,0 +1,140 @@
+name: Reusable demo deploy
+
+on:
+  workflow_call:
+    inputs:
+      pr-number:
+        description: Pull request number to deploy
+        required: true
+        type: number
+      commit-sha:
+        description: Exact pull request commit SHA to build
+        required: true
+        type: string
+      api-url:
+        description: Base URL of the demos controller API
+        required: true
+        type: string
+      api-connect-url:
+        description: Optional network endpoint used while preserving the API URL Host header
+        required: false
+        default: ""
+        type: string
+      api-insecure:
+        description: Disable TLS certificate verification for the connection endpoint
+        required: false
+        default: false
+        type: boolean
+      rockcraft-path:
+        description: Directory containing rockcraft.yaml
+        required: false
+        default: .
+        type: string
+      timeout-seconds:
+        description: Maximum time to wait for the demo to become ready
+        required: false
+        default: 900
+        type: number
+      poll-interval-seconds:
+        description: Delay between controller status requests
+        required: false
+        default: 10
+        type: number
+    secrets:
+      demos-hmac-key:
+        description: Repository-specific HMAC key for the demos controller
+        required: true
+    outputs:
+      demo-url:
+        description: URL reported by the demos controller
+        value: ${{ jobs.deploy.outputs.demo-url }}
+      image-reference:
+        description: Immutable GHCR image reference sent to the controller
+        value: ${{ jobs.build.outputs.image-reference }}
+
+permissions: {}
+
+concurrency:
+  group: demo-deploy-${{ github.repository }}-${{ inputs.pr-number }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and publish
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image-reference: ${{ steps.image.outputs.reference }}
+    steps:
+      - name: Check out the exact PR commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit-sha }}
+          persist-credentials: false
+
+      - name: Verify checkout and rock definition
+        shell: bash
+        env:
+          COMMIT_SHA: ${{ inputs.commit-sha }}
+          ROCKCRAFT_PATH: ${{ inputs.rockcraft-path }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$COMMIT_SHA"
+          test -f "${ROCKCRAFT_PATH}/rockcraft.yaml"
+
+      - name: Validate and pack rock
+        id: rockcraft
+        uses: canonical/craft-actions/rockcraft/pack@acd2f2e61c7563b38ba89390ca0e910fa7d2784f # v0.1.1
+        with:
+          path: ${{ inputs.rockcraft-path }}
+          verbosity: brief
+
+      - name: Publish immutable PR image to GHCR
+        id: image
+        shell: bash
+        env:
+          COMMIT_SHA: ${{ inputs.commit-sha }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr-number }}
+          ROCK_FILE: ${{ steps.rockcraft.outputs.rock }}
+        run: |
+          set -euo pipefail
+          image_name="ghcr.io/${GITHUB_REPOSITORY,,}"
+          [[ "$COMMIT_SHA" =~ ^[0-9a-f]{40}$ ]]
+          tag="pr-${PR_NUMBER}-sha-${COMMIT_SHA:0:12}"
+          test -n "$ROCK_FILE"
+          test -f "$ROCK_FILE"
+          rockcraft.skopeo --insecure-policy copy \
+            --dest-creds "${GITHUB_ACTOR}:${GH_TOKEN}" \
+            "oci-archive:${ROCK_FILE}" "docker://${image_name}:${tag}"
+          digest="$(
+            rockcraft.skopeo --insecure-policy inspect \
+              --creds "${GITHUB_ACTOR}:${GH_TOKEN}" \
+              "docker://${image_name}:${tag}" |
+              python3 -c 'import json,sys; print(json.load(sys.stdin)["Digest"])'
+          )"
+          test "${digest#sha256:}" != "$digest"
+          echo "name=$image_name" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "reference=${image_name}@${digest}" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Deploy
+    needs: build
+    permissions:
+      pull-requests: write
+    uses: ./.github/workflows/demo-api.yaml
+    with:
+      operation: deploy
+      pr-number: ${{ inputs.pr-number }}
+      commit-sha: ${{ inputs.commit-sha }}
+      image-reference: ${{ needs.build.outputs.image-reference }}
+      api-url: ${{ inputs.api-url }}
+      api-connect-url: ${{ inputs.api-connect-url }}
+      api-insecure: ${{ inputs.api-insecure }}
+      timeout-seconds: ${{ inputs.timeout-seconds }}
+      poll-interval-seconds: ${{ inputs.poll-interval-seconds }}
+    secrets:
+      demos-hmac-key: ${{ secrets['demos-hmac-key'] }}
