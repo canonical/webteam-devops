@@ -36,11 +36,6 @@ on:
         required: false
         default: true
         type: boolean
-      workflow-client-ref:
-        description: webteam-devops ref containing the signed API client
-        required: false
-        default: main
-        type: string
     secrets:
       demos-hmac-key:
         description: Repository-specific HMAC key for the demos controller
@@ -56,48 +51,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  destroy:
+    name: Destroy demo
+    permissions:
+      pull-requests: write
+    uses: ./.github/workflows/demo-api.yaml
+    with:
+      operation: destroy
+      pr-number: ${{ inputs.pr-number }}
+      api-url: ${{ inputs.api-url }}
+      api-connect-url: ${{ inputs.api-connect-url }}
+      api-insecure: ${{ inputs.api-insecure }}
+      timeout-seconds: ${{ inputs.timeout-seconds }}
+      poll-interval-seconds: ${{ inputs.poll-interval-seconds }}
+    secrets:
+      demos-hmac-key: ${{ secrets['demos-hmac-key'] }}
+
   cleanup:
-    name: Destroy demo and clean image
+    name: Clean image
+    needs: destroy
     runs-on: ubuntu-24.04
     steps:
-      - name: Check out signed API client
-        uses: actions/checkout@v4
-        with:
-          repository: canonical/webteam-devops
-          ref: ${{ inputs.workflow-client-ref }}
-          path: _demo_workflow
-          persist-credentials: false
-
-      - name: Request destruction and wait for cleanup
-        id: destroy-api
-        continue-on-error: true
-        shell: bash
-        env:
-          API_CONNECT_URL: ${{ inputs.api-connect-url }}
-          API_INSECURE: ${{ inputs.api-insecure }}
-          API_URL: ${{ inputs.api-url }}
-          DEMOS_HMAC_KEY: ${{ secrets['demos-hmac-key'] }}
-          POLL_INTERVAL: ${{ inputs.poll-interval-seconds }}
-          PR_NUMBER: ${{ inputs.pr-number }}
-          TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
-        run: |
-          connection_args=()
-          if [ -n "$API_CONNECT_URL" ]; then
-            connection_args+=(--connect-url "$API_CONNECT_URL")
-          fi
-          if [ "$API_INSECURE" = "true" ]; then
-            connection_args+=(--insecure)
-          fi
-          python3 _demo_workflow/.github/scripts/demo_api.py \
-            --api-url "$API_URL" \
-            "${connection_args[@]}" \
-            --repository "$GITHUB_REPOSITORY" \
-            --pr-number "$PR_NUMBER" \
-            --timeout "$TIMEOUT_SECONDS" \
-            --interval "$POLL_INTERVAL" \
-            destroy \
-            --delivery-id "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-destroy"
-
       - name: Delete single-tag GHCR package version
         if: ${{ inputs.delete-image }}
         id: delete-image
@@ -135,9 +109,9 @@ jobs:
         if: ${{ always() }}
         uses: actions/github-script@v7
         env:
-          API_MESSAGE: ${{ steps.destroy-api.outputs.message }}
-          API_STATE: ${{ steps.destroy-api.outputs.state }}
-          DESTROY_OUTCOME: ${{ steps.destroy-api.outcome }}
+          API_MESSAGE: ${{ needs.destroy.outputs.message }}
+          API_STATE: ${{ needs.destroy.outputs.state }}
+          DESTROY_OUTCOME: ${{ needs.destroy.result }}
           IMAGE_OUTCOME: ${{ steps.delete-image.outcome }}
           MARKER: <!-- demos-controller:${{ github.repository }}:${{ inputs.pr-number }} -->
         with:
@@ -174,8 +148,3 @@ jobs:
                 body,
               });
             }
-
-      - name: Fail when controller cleanup did not complete
-        if: ${{ steps.destroy-api.outcome == 'failure' }}
-        shell: bash
-        run: exit 1
