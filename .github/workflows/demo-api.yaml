@@ -23,14 +23,6 @@ on:
         description: Base URL of the demos controller API
         required: true
         type: string
-      api-connect-url:
-        description: Optional network endpoint preserving the API URL Host header
-        default: ""
-        type: string
-      api-insecure:
-        description: Disable TLS certificate verification for the connection endpoint
-        default: false
-        type: boolean
       timeout-seconds:
         description: Maximum time to wait for the controller operation
         required: true
@@ -71,8 +63,6 @@ jobs:
         continue-on-error: true
         shell: bash
         env:
-          API_CONNECT_URL: ${{ inputs.api-connect-url }}
-          API_INSECURE: ${{ inputs.api-insecure }}
           API_URL: ${{ inputs.api-url }}
           COMMIT_SHA: ${{ inputs.commit-sha }}
           DEMOS_HMAC_KEY: ${{ secrets['demos-hmac-key'] }}
@@ -83,13 +73,6 @@ jobs:
           TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
         run: |
           set -euo pipefail
-          connection_args=()
-          if [ -n "$API_CONNECT_URL" ]; then
-            connection_args+=(--connect-url "$API_CONNECT_URL")
-          fi
-          if [ "$API_INSECURE" = "true" ]; then
-            connection_args+=(--insecure)
-          fi
           case "$OPERATION" in
             deploy)
               operation_args=(deploy --commit-sha "$COMMIT_SHA" --image "$IMAGE_REFERENCE")
@@ -104,7 +87,6 @@ jobs:
           esac
           python3 - \
             --api-url "$API_URL" \
-            "${connection_args[@]}" \
             --repository "$GITHUB_REPOSITORY" \
             --pr-number "$PR_NUMBER" \
             --timeout "$TIMEOUT_SECONDS" \
@@ -120,7 +102,6 @@ jobs:
           import hmac
           import json
           import os
-          import ssl
           import sys
           import time
           import urllib.error
@@ -153,8 +134,6 @@ jobs:
               path: str,
               repository: str,
               key: str,
-              connect_url: str | None = None,
-              insecure: bool = False,
               body: dict[str, Any] | None = None,
               nonce: str | None = None,
           ) -> dict[str, Any]:
@@ -184,22 +163,14 @@ jobs:
                   "X-Demos-Signature": f"sha256={signature}",
                   "X-Demos-Timestamp": timestamp,
               }
-              request_url = urllib.parse.urlunsplit(target)
-              if connect_url:
-                  connect_target = urllib.parse.urlsplit(
-                      f"{connect_url.rstrip('/')}{request_target}"
-                  )
-                  request_url = urllib.parse.urlunsplit(connect_target)
-                  headers["Host"] = target.netloc
               api_request = urllib.request.Request(
-                  request_url,
+                  urllib.parse.urlunsplit(target),
                   data=raw_body if body is not None else None,
                   headers=headers,
                   method=method.upper(),
               )
               try:
-                  context = ssl._create_unverified_context() if insecure else None
-                  with urllib.request.urlopen(api_request, timeout=30, context=context) as response:
+                  with urllib.request.urlopen(api_request, timeout=30) as response:
                       response_body = response.read()
               except urllib.error.HTTPError as error:
                   response_body = error.read().decode(errors="replace")[:2000]
@@ -267,8 +238,6 @@ jobs:
                           path,
                           args.repository,
                           args.key,
-                          connect_url=args.connect_url,
-                          insecure=args.insecure,
                       )
                   except ApiError as error:
                       if desired_absence and error.status == 404:
@@ -319,8 +288,6 @@ jobs:
               parser = argparse.ArgumentParser()
               parser.add_argument("--api-url", required=True)
               parser.add_argument("--repository", required=True)
-              parser.add_argument("--connect-url")
-              parser.add_argument("--insecure", action="store_true")
               parser.add_argument("--pr-number", required=True, type=int)
               parser.add_argument("--key-env", default="DEMOS_HMAC_KEY")
               parser.add_argument("--output", type=Path, default=Path(".demo-result.json"))
@@ -364,8 +331,6 @@ jobs:
                           "/api/v1/deploy",
                           args.repository,
                           key,
-                          connect_url=args.connect_url,
-                          insecure=args.insecure,
                           body=body,
                           nonce=args.delivery_id,
                       )
@@ -382,8 +347,6 @@ jobs:
                           "/api/v1/destroy",
                           args.repository,
                           key,
-                          connect_url=args.connect_url,
-                          insecure=args.insecure,
                           body=body,
                           nonce=args.delivery_id,
                       )

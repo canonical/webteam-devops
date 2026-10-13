@@ -24,8 +24,6 @@ class PollTests(unittest.TestCase):
             interval=1,
             api_url="https://demos.example",
             key="test-key",
-            connect_url=None,
-            insecure=False,
         )
 
     def test_only_operation_specific_states_succeed(self):

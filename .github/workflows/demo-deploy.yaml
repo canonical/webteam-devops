@@ -15,16 +15,6 @@ on:
         description: Base URL of the demos controller API
         required: true
         type: string
-      api-connect-url:
-        description: Optional network endpoint used while preserving the API URL Host header
-        required: false
-        default: ""
-        type: string
-      api-insecure:
-        description: Disable TLS certificate verification for the connection endpoint
-        required: false
-        default: false
-        type: boolean
       rockcraft-path:
         description: Directory containing rockcraft.yaml
         required: false
@@ -132,8 +122,6 @@ jobs:
       commit-sha: ${{ inputs.commit-sha }}
       image-reference: ${{ needs.build.outputs.image-reference }}
       api-url: ${{ inputs.api-url }}
-      api-connect-url: ${{ inputs.api-connect-url }}
-      api-insecure: ${{ inputs.api-insecure }}
       timeout-seconds: ${{ inputs.timeout-seconds }}
       poll-interval-seconds: ${{ inputs.poll-interval-seconds }}
     secrets:
