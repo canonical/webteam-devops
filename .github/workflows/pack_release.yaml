@@ -103,11 +103,28 @@ jobs:
         working-directory: ./charm
         run: charmcraft pack -v --output "$PWD"
 
+      - name: Save packed charm for publication retries
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: ${{ inputs.charm_name }}-charm
+          path: ./charm/*.charm
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Upload charm
         working-directory: ./charm
         env:
           CHARMCRAFT_AUTH: ${{ secrets.CHARMHUB_TOKEN }}
-        run: charmcraft upload *.charm
+        run: |
+          for attempt in 1 2 3; do
+            if charmcraft upload *.charm; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              sleep 10
+            fi
+          done
+          exit 1
 
   publish-image-and-release-charm:
     name: Publish OCI Image and Release Charm
