@@ -36,7 +36,7 @@ jobs:
       charm_changed: ${{ steps.check.outputs.charm_changed }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
 
@@ -63,10 +63,10 @@ jobs:
       ROCKCRAFT_ENABLE_EXPERIMENTAL_EXTENSIONS: True
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Setup LXD
-        uses: canonical/setup-lxd@main
+        uses: canonical/setup-lxd@25c036d6aa7fd68c4d980887ad2c0fb122234cd0
 
       - name: Setup rockcraft
         run: sudo snap install rockcraft --classic
@@ -76,7 +76,7 @@ jobs:
 
       - name: Upload rock
         id: upload
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ${{ inputs.charm_name }}-rock
           path: ./*.rock
@@ -91,16 +91,17 @@ jobs:
       CHARMCRAFT_ENABLE_EXPERIMENTAL_EXTENSIONS: True
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Setup LXD
-        uses: canonical/setup-lxd@main
+        uses: canonical/setup-lxd@25c036d6aa7fd68c4d980887ad2c0fb122234cd0
 
       - name: Setup charmcraft
         run: sudo snap install charmcraft --classic --channel=latest/stable
 
       - name: Pack charm
-        run: charmcraft pack -v --project-dir ./charm
+        working-directory: ./charm
+        run: charmcraft pack -v --output "$PWD"
 
       - name: Upload charm
         working-directory: ./charm
@@ -121,7 +122,7 @@ jobs:
       revision_number: ${{ steps.release_charm.outputs.revision_number }}
     steps:
       - name: Get Rock
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: ${{ inputs.charm_name }}-rock
 
@@ -144,7 +145,7 @@ jobs:
           echo "Pulled image ID: $IMAGE_ID"
 
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Determine resource name
         id: resource_name
