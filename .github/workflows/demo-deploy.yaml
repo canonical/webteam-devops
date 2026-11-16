@@ -31,8 +31,8 @@ on:
         default: 10
         type: number
     secrets:
-      demos-hmac-key:
-        description: Repository-specific HMAC key for the demos controller
+      demos-api-token:
+        description: Repository-specific bearer token for the demos controller
         required: true
     outputs:
       demo-url:
@@ -59,7 +59,7 @@ jobs:
       image-reference: ${{ steps.image.outputs.reference }}
     steps:
       - name: Check out the exact PR commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ inputs.commit-sha }}
           persist-credentials: false
@@ -125,4 +125,4 @@ jobs:
       timeout-seconds: ${{ inputs.timeout-seconds }}
       poll-interval-seconds: ${{ inputs.poll-interval-seconds }}
     secrets:
-      demos-hmac-key: ${{ secrets['demos-hmac-key'] }}
+      demos-api-token: ${{ secrets['demos-api-token'] }}

@@ -32,8 +32,8 @@ on:
         required: true
         type: number
     secrets:
-      demos-hmac-key:
-        description: Repository-specific HMAC key for the demos controller
+      demos-api-token:
+        description: Repository-specific bearer token for the demos controller
         required: true
     outputs:
       demo-url:
@@ -65,7 +65,7 @@ jobs:
         env:
           API_URL: ${{ inputs.api-url }}
           COMMIT_SHA: ${{ inputs.commit-sha }}
-          DEMOS_HMAC_KEY: ${{ secrets['demos-hmac-key'] }}
+          DEMOS_API_TOKEN: ${{ secrets['demos-api-token'] }}
           IMAGE_REFERENCE: ${{ inputs.image-reference }}
           OPERATION: ${{ inputs.operation }}
           POLL_INTERVAL: ${{ inputs.poll-interval-seconds }}
@@ -93,13 +93,11 @@ jobs:
             --interval "$POLL_INTERVAL" \
             "${operation_args[@]}" \
             --delivery-id "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${OPERATION}" <<'PY'
-          """Call the demos controller API with replay-resistant HMAC authentication."""
+          """Call the demos controller API with repository-scoped bearer tokens."""
 
           from __future__ import annotations
 
           import argparse
-          import hashlib
-          import hmac
           import json
           import os
           import sys
@@ -107,7 +105,6 @@ jobs:
           import urllib.error
           import urllib.parse
           import urllib.request
-          import uuid
           from pathlib import Path
           from typing import Any
 
@@ -128,40 +125,44 @@ jobs:
               return json.dumps(value, separators=(",", ":"), sort_keys=True).encode()
 
 
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              """Never forward repository credentials to a redirect target."""
+
+              def redirect_request(self, req, fp, code, msg, headers, newurl):
+                  return None
+
+
           def request(
               api_url: str,
               method: str,
               path: str,
               repository: str,
-              key: str,
+              token: str,
               body: dict[str, Any] | None = None,
-              nonce: str | None = None,
           ) -> dict[str, Any]:
+              base = urllib.parse.urlsplit(api_url)
+              if (
+                  base.scheme != "https"
+                  or not base.hostname
+                  or base.username is not None
+                  or base.password is not None
+                  or base.query
+                  or base.fragment
+              ):
+                  raise ApiError(
+                      "Controller API URL must be HTTPS without credentials, query, or fragment"
+                  )
               raw_body = compact_json(body) if body is not None else b""
-              timestamp = str(int(time.time()))
-              nonce = nonce or str(uuid.uuid4())
               target = urllib.parse.urlsplit(f"{api_url.rstrip('/')}{path}")
               request_target = target.path
               if target.query:
                   request_target = f"{request_target}?{target.query}"
-              signed = b"\n".join(
-                  [
-                      method.upper().encode(),
-                      request_target.encode(),
-                      timestamp.encode(),
-                      nonce.encode(),
-                      raw_body,
-                  ]
-              )
-              signature = hmac.new(key.encode(), signed, hashlib.sha256).hexdigest()
               headers = {
                   "Accept": "application/json",
                   "Content-Type": "application/json",
                   "User-Agent": "github-actions-demos-client/1",
-                  "X-Demos-Nonce": nonce,
+                  "Authorization": f"Bearer {token}",
                   "X-Demos-Repository": repository,
-                  "X-Demos-Signature": f"sha256={signature}",
-                  "X-Demos-Timestamp": timestamp,
               }
               api_request = urllib.request.Request(
                   urllib.parse.urlunsplit(target),
@@ -169,13 +170,14 @@ jobs:
                   headers=headers,
                   method=method.upper(),
               )
+              opener = urllib.request.build_opener(NoRedirect())
               try:
-                  with urllib.request.urlopen(api_request, timeout=30) as response:
+                  with opener.open(api_request, timeout=30) as response:
                       response_body = response.read()
               except urllib.error.HTTPError as error:
-                  response_body = error.read().decode(errors="replace")[:2000]
+                  # A proxy can echo request headers in an error body. Never publish it.
                   raise ApiError(
-                      f"{method.upper()} {request_target} returned HTTP {error.code}: {response_body}",
+                      f"{method.upper()} {request_target} returned HTTP {error.code}",
                       error.code,
                   ) from error
               except urllib.error.URLError as error:
@@ -237,7 +239,7 @@ jobs:
                           "GET",
                           path,
                           args.repository,
-                          args.key,
+                          args.token,
                       )
                   except ApiError as error:
                       if desired_absence and error.status == 404:
@@ -289,7 +291,7 @@ jobs:
               parser.add_argument("--api-url", required=True)
               parser.add_argument("--repository", required=True)
               parser.add_argument("--pr-number", required=True, type=int)
-              parser.add_argument("--key-env", default="DEMOS_HMAC_KEY")
+              parser.add_argument("--token-env", default="DEMOS_API_TOKEN")
               parser.add_argument("--output", type=Path, default=Path(".demo-result.json"))
               parser.add_argument("--timeout", type=int, default=600)
               parser.add_argument("--interval", type=int, default=10)
@@ -307,14 +309,14 @@ jobs:
 
           def main() -> int:
               args = parse_args()
-              key = os.environ.get(args.key_env)
-              if not key:
+              token = os.environ.get(args.token_env)
+              if not token:
                   print(
-                      f"Required secret environment variable {args.key_env} is not set",
+                      f"Required secret environment variable {args.token_env} is not set",
                       file=sys.stderr,
                   )
                   return 2
-              args.key = key
+              args.token = token
               args.repository = args.repository.lower()
               try:
                   if args.operation == "deploy":
@@ -330,9 +332,8 @@ jobs:
                           "POST",
                           "/api/v1/deploy",
                           args.repository,
-                          key,
+                          token,
                           body=body,
-                          nonce=args.delivery_id,
                       )
                       result = poll(args)
                   else:
@@ -346,9 +347,8 @@ jobs:
                           "POST",
                           "/api/v1/destroy",
                           args.repository,
-                          key,
+                          token,
                           body=body,
-                          nonce=args.delivery_id,
                       )
                       result = poll(args, desired_absence=True)
               except ApiError as error:
@@ -370,7 +370,7 @@ jobs:
 
       - name: Update persistent PR comment
         if: ${{ always() }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
           API_MESSAGE: ${{ steps.controller.outputs.message }}
           API_STATE: ${{ steps.controller.outputs.state }}
